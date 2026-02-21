@@ -137,7 +137,6 @@ serve(async (req) => {
                 conversation_config_override: {
                   agent: {
                     prompt: { prompt },
-                    first_message: `Hello, is this ${clientName}? I'm calling from The Cobblestone Kitchen regarding an overdue invoice of ${amount}. Do you have a moment?`,
                   },
                 },
               })
