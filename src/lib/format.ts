@@ -1,6 +1,6 @@
 const CURRENCY_CONFIG: Record<string, { symbol: string; locale: string; code: string }> = {
-  EUR: { symbol: "â‚¬", locale: "en-IE", code: "EUR" },
-  GBP: { symbol: "Â£", locale: "en-GB", code: "GBP" },
+  EUR: { symbol: "€", locale: "en-IE", code: "EUR" },
+  GBP: { symbol: "£", locale: "en-GB", code: "GBP" },
   USD: { symbol: "$", locale: "en-US", code: "USD" },
 };
 

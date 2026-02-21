@@ -20,23 +20,19 @@ interface AppSidebarProps {
 export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   const location = useLocation();
   const { account } = useAccount();
+  const showTextLogo = location.pathname !== "/dashboard";
 
   return (
     <aside
-      className={`flex h-screen flex-col border-r border-border bg-card transition-all duration-300 ${
-        collapsed ? "w-16" : "w-60"
+      className={`m-3 flex h-[calc(100vh-1.5rem)] flex-col rounded-2xl border border-border/70 bg-card/95 shadow-lg backdrop-blur transition-all duration-300 ${
+        collapsed ? "w-14" : "w-52"
       }`}
     >
       {/* Logo + toggle */}
-      <div className={`flex items-center ${collapsed ? "justify-center p-3" : "justify-between p-5"}`}>
+      <div className={`flex items-center ${collapsed ? "justify-center p-3" : "justify-between px-4 pb-3 pt-4"}`}>
         {!collapsed && (
           <div className="min-w-0">
-            <FloatLogo />
-            {account && (
-              <p className="mt-2 truncate text-xs text-muted-foreground">
-                {account.business_name}
-              </p>
-            )}
+            <FloatLogo showText={showTextLogo} />
           </div>
         )}
         <button
@@ -49,7 +45,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className={`flex-1 space-y-1 ${collapsed ? "px-2" : "px-3"}`}>
+      <nav className={`flex-1 space-y-1 ${collapsed ? "px-2" : "px-2.5"}`}>
         {navItems.map(({ to, label, icon: Icon }) => {
           const active = location.pathname === to;
           const link = (
@@ -85,7 +81,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className={`border-t border-border ${collapsed ? "p-2" : "p-4"}`}>
+      <div className={`border-t border-border/70 ${collapsed ? "p-2" : "p-3.5"}`}>
         {collapsed ? (
           <Tooltip delayDuration={0}>
             <TooltipTrigger asChild>

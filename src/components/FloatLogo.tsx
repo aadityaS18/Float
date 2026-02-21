@@ -1,15 +1,18 @@
-import { Waves } from "lucide-react";
+interface FloatLogoProps {
+  size?: "default" | "large";
+  showText?: boolean;
+}
 
-export function FloatLogo({ size = "default" }: { size?: "default" | "large" }) {
-  const iconSize = size === "large" ? 28 : 20;
+export function FloatLogo({ size = "default", showText = true }: FloatLogoProps) {
+  const logoSize = size === "large" ? 88 : 72;
   const textClass = size === "large" ? "text-2xl" : "text-lg";
 
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex items-center justify-center rounded-lg bg-primary p-1.5">
-        <Waves className="text-primary-foreground" size={iconSize} />
+    <div className={`flex items-center ${showText ? "gap-2" : ""}`}>
+      <div className="overflow-hidden rounded-lg" style={{ height: logoSize, width: logoSize }}>
+        <img src="/float-logo.png" alt="Float logo" className="h-full w-full object-contain" />
       </div>
-      <span className={`font-bold text-foreground ${textClass}`}>Float</span>
+      {showText && <span className={`font-bold text-foreground ${textClass}`}>Float</span>}
     </div>
   );
 }

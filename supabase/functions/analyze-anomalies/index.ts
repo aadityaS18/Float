@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { claudeComplete, parseJsonFromModel } from "../_shared/claude.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,102 +8,125 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+type TransactionRow = {
+  amount: number;
+  category: string | null;
+  merchant_name: string | null;
+  is_income: boolean | null;
+  created: string | null;
+  description: string | null;
+};
+
+type AnomalyInsight = {
+  title: string;
+  message: string;
+  type: "critical" | "warning" | "info";
+  action_label: string | null;
+  action_type: "view_transactions" | "chat" | null;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { account_id } = await req.json();
-    if (!account_id) throw new Error("account_id required");
+    const { account_id: accountId } = await req.json();
+    if (!accountId) throw new Error("account_id required");
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error("Supabase service role configuration missing");
+    }
 
     const sb = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch last 90 days of transactions
     const since = new Date();
     since.setDate(since.getDate() - 90);
-    const { data: transactions } = await sb
+
+    const { data: transactionsData, error: transactionsError } = await sb
       .from("transactions")
       .select("amount, category, merchant_name, is_income, created, description")
-      .eq("account_id", account_id)
+      .eq("account_id", accountId)
       .gte("created", since.toISOString())
       .order("created", { ascending: false });
+    if (transactionsError) throw transactionsError;
 
-    if (!transactions || transactions.length < 5) {
-      return new Response(JSON.stringify({ insights: [], message: "Not enough transaction data" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const transactions = (transactionsData ?? []) as TransactionRow[];
+
+    if (transactions.length < 5) {
+      return new Response(
+        JSON.stringify({ insights: [], message: "Not enough transaction data" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
-    // Build a summary for the AI
-    const txSummary = transactions.slice(0, 100).map((t) =>
-      `${t.created}: ${t.is_income ? "IN" : "OUT"} €${(Math.abs(t.amount) / 100).toFixed(2)} — ${t.merchant_name || t.category || t.description || "unknown"}`
-    ).join("\n");
+    const txSummary = transactions
+      .slice(0, 100)
+      .map((transaction) => {
+        const direction = transaction.is_income ? "IN" : "OUT";
+        const amountEur = (Math.abs(transaction.amount) / 100).toFixed(2);
+        const label =
+          transaction.merchant_name ||
+          transaction.category ||
+          transaction.description ||
+          "unknown";
+        return `${transaction.created}: ${direction} EUR ${amountEur} - ${label}`;
+      })
+      .join("\n");
 
-    const prompt = `You are a financial anomaly detector for a small business. Analyze these recent transactions and identify anomalies — unusual spending, unexpected charges, patterns that break from norms, or suspicious duplicates.
+    const prompt = `You are a financial anomaly detector for a small business.
+
+Analyze these recent transactions and identify anomalies:
+- unusual spending
+- unexpected charges
+- suspicious duplicates
+- pattern breaks from normal behavior
 
 Transactions (most recent first):
 ${txSummary}
 
-Return a JSON array of anomalies found. Each object must have:
-- "title": short title (max 60 chars)
-- "message": explanation (max 150 chars)
-- "type": one of "critical", "warning", "info"
-- "action_label": suggested action button text (max 20 chars) or null
-- "action_type": "view_transactions" or "chat" or null
+Return ONLY a JSON array.
+Each item must be:
+{
+  "title": "max 60 chars",
+  "message": "max 150 chars",
+  "type": "critical|warning|info",
+  "action_label": "max 20 chars or null",
+  "action_type": "view_transactions|chat|null"
+}
 
-Return ONLY the JSON array, no markdown. If no anomalies found, return [].`;
+If no anomalies are found, return [].`;
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [{ role: "user", content: prompt }],
-      }),
+    const { text } = await claudeComplete({
+      messages: [{ role: "user", content: prompt }],
+      maxTokens: 1400,
+      temperature: 0.2,
     });
 
-    if (!aiResp.ok) {
-      console.error("AI error:", aiResp.status);
-      return new Response(JSON.stringify({ insights: [], error: "AI service error" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const anomalies = parseJsonFromModel<AnomalyInsight[]>(text, []);
 
-    const aiData = await aiResp.json();
-    const raw = aiData.choices?.[0]?.message?.content ?? "[]";
-    // Strip markdown fences if present
-    const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    let anomalies: any[] = [];
-    try { anomalies = JSON.parse(cleaned); } catch { anomalies = []; }
-
-    // Upsert as ai_insights
     if (anomalies.length > 0) {
-      const inserts = anomalies.slice(0, 5).map((a: any) => ({
-        account_id,
-        title: a.title,
-        message: a.message,
-        type: a.type || "warning",
-        action_label: a.action_label || null,
-        action_type: a.action_type || null,
+      const inserts = anomalies.slice(0, 5).map((insight) => ({
+        account_id: accountId,
+        title: insight.title,
+        message: insight.message,
+        type: insight.type || "warning",
+        action_label: insight.action_label || null,
+        action_type: insight.action_type || null,
         dismissed: false,
       }));
+
       await sb.from("ai_insights").insert(inserts);
     }
 
     return new Response(JSON.stringify({ insights: anomalies.slice(0, 5) }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    console.error("analyze-anomalies error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  } catch (error) {
+    console.error("analyze-anomalies error:", error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
 });

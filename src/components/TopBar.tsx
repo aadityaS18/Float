@@ -18,7 +18,7 @@ export function TopBar({ title, subtitle }: TopBarProps) {
     : "FL";
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border bg-card/95 backdrop-blur-xl px-6 shadow-sm">
+    <header className="sticky top-3 z-30 mx-4 mt-3 flex h-14 items-center gap-4 rounded-2xl border border-border/70 bg-card/90 px-5 shadow-lg backdrop-blur-xl">
       <div className="min-w-0">
         <h1 className="text-base font-semibold text-foreground leading-tight">{title}</h1>
         {subtitle && <p className="text-xs text-muted-foreground leading-tight">{subtitle}</p>}

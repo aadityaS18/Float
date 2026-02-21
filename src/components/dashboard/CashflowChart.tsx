@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef, type ReactNode } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, ReferenceArea,
@@ -24,6 +24,7 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
   const [animate, setAnimate] = useState(false);
   const [drilldown, setDrilldown] = useState<{ date: string; projected: number } | null>(null);
   const [showScenarios, setShowScenarios] = useState(false);
+  const hasAnimatedOnce = useRef(false);
   const today = new Date("2026-02-21");
 
   // Generate mock breakdown for a projected day
@@ -47,7 +48,11 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
   // Trigger animation on mount / range change
   useEffect(() => {
     setAnimate(false);
-    const t = setTimeout(() => setAnimate(true), 50);
+    const delay = hasAnimatedOnce.current ? 90 : 220;
+    const t = setTimeout(() => {
+      setAnimate(true);
+      hasAnimatedOnce.current = true;
+    }, delay);
     return () => clearTimeout(t);
   }, [range]);
 
@@ -118,18 +123,18 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
     const isProjected = balVal == null;
 
     return (
-      <div className="rounded-xl border border-border bg-card/95 backdrop-blur-sm px-4 py-3 shadow-2xl">
-        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
+      <div className="rounded-2xl border border-border/70 bg-background/95 px-4 py-3 shadow-xl backdrop-blur-md">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
         <p className="mt-1 font-mono text-lg font-bold tabular-nums text-foreground">
           {formatCurrency(val)}
         </p>
         {isProjected && (
-          <p className="mt-0.5 flex items-center gap-1 text-[9px] text-primary font-medium">
+          <p className="mt-0.5 flex items-center gap-1 text-[9px] font-medium text-primary">
             <Sparkles size={8} /> AI projected
           </p>
         )}
         {showScenarios && bestVal != null && worstVal != null && (
-          <div className="mt-1.5 space-y-0.5 border-t border-border pt-1.5">
+          <div className="mt-2 space-y-0.5 border-t border-border/80 pt-1.5">
             <p className="flex items-center justify-between gap-3 text-[10px]">
               <span className="text-float-green font-medium">Best case</span>
               <span className="font-mono font-semibold tabular-nums text-float-green">{formatCurrency(bestVal)}</span>
@@ -175,33 +180,33 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
         y2={height}
         stroke="hsl(var(--foreground))"
         strokeWidth={1}
-        strokeOpacity={0.1}
-        strokeDasharray="4 2"
+        strokeOpacity={0.16}
+        strokeDasharray="5 4"
       />
     );
   };
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10">
-            <TrendingUp size={13} className="text-primary" />
+    <Card className="overflow-hidden border-border/60 bg-gradient-to-b from-card via-card to-accent/20 shadow-sm">
+      <CardHeader className="flex flex-col gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-primary/20 bg-primary/10">
+            <TrendingUp size={14} className="text-primary" />
           </div>
-          <CardTitle className="text-sm font-semibold">Cashflow Forecast</CardTitle>
-          <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold text-primary">
+          <CardTitle className="text-sm font-semibold tracking-tight">Cashflow Forecast</CardTitle>
+          <span className="flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold text-primary">
             <Sparkles size={10} /> AI-powered
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-lg border border-border bg-accent/50 p-0.5">
+        <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+          <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/70 p-0.5">
             {(["14d", "30d", "60d"] as const).map((r) => (
               <button
                 key={r}
                 onClick={() => setRange(r)}
                 className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all duration-200 ${
                   range === r
-                    ? "bg-card text-foreground shadow-sm"
+                    ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -214,7 +219,7 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
             className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[10px] font-medium transition-all duration-200 ${
               showScenarios
                 ? "border-primary/30 bg-primary/10 text-primary"
-                : "border-border bg-accent/50 text-muted-foreground hover:text-foreground"
+                : "border-border/70 bg-background/70 text-muted-foreground hover:text-foreground"
             }`}
           >
             <GitBranch size={10} />
@@ -225,7 +230,7 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
 
       {/* Summary stats */}
       {hasData && (
-        <div className="flex gap-3 px-6 pb-3">
+        <div className="flex flex-wrap gap-2.5 px-6 pb-3">
           <StatPill
             color="primary"
             label="Balance"
@@ -263,63 +268,68 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
             <p className="text-xs text-muted-foreground">Load demo data or connect Monzo to see your forecast</p>
           </div>
         ) : (
-          <div className={`transition-opacity duration-700 ${animate ? "opacity-100" : "opacity-0"}`}>
+          <div
+            className={`relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-b from-background via-background to-accent/20 p-2.5 transition-all duration-700 ease-out ${
+              animate ? "translate-y-0 scale-100 opacity-100" : "translate-y-4 scale-[0.985] opacity-0"
+            }`}
+          >
             <ResponsiveContainer width="100%" height={320}>
-              <AreaChart data={chartData} margin={{ top: 16, right: 16, left: -4, bottom: 4 }}>
+              <AreaChart data={chartData} margin={{ top: 18, right: 18, left: -6, bottom: 6 }}>
                 <defs>
                   <linearGradient id="balanceGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.2} />
-                    <stop offset="40%" stopColor="hsl(var(--primary))" stopOpacity={0.08} />
+                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.26} />
+                    <stop offset="40%" stopColor="hsl(var(--primary))" stopOpacity={0.1} />
                     <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="projectedGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--float-amber))" stopOpacity={0.15} />
-                    <stop offset="40%" stopColor="hsl(var(--float-amber))" stopOpacity={0.06} />
+                    <stop offset="0%" stopColor="hsl(var(--float-amber))" stopOpacity={0.2} />
+                    <stop offset="40%" stopColor="hsl(var(--float-amber))" stopOpacity={0.08} />
                     <stop offset="100%" stopColor="hsl(var(--float-amber))" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="dangerGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--float-red))" stopOpacity={0.06} />
-                    <stop offset="100%" stopColor="hsl(var(--float-red))" stopOpacity={0.01} />
+                    <stop offset="0%" stopColor="hsl(var(--float-red))" stopOpacity={0.1} />
+                    <stop offset="100%" stopColor="hsl(var(--float-red))" stopOpacity={0.02} />
                   </linearGradient>
                   <linearGradient id="bestCaseGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--float-green))" stopOpacity={0.12} />
+                    <stop offset="0%" stopColor="hsl(var(--float-green))" stopOpacity={0.15} />
                     <stop offset="100%" stopColor="hsl(var(--float-green))" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="worstCaseGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--float-red))" stopOpacity={0.1} />
+                    <stop offset="0%" stopColor="hsl(var(--float-red))" stopOpacity={0.14} />
                     <stop offset="100%" stopColor="hsl(var(--float-red))" stopOpacity={0} />
                   </linearGradient>
                 </defs>
 
                 <CartesianGrid
-                  strokeDasharray="3 3"
+                  strokeDasharray="4 4"
                   stroke="hsl(var(--border))"
                   vertical={false}
-                  opacity={0.4}
+                  opacity={0.3}
                 />
 
                 <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                   tickLine={false}
                   axisLine={false}
                   interval="preserveStartEnd"
-                  tickMargin={10}
+                  tickMargin={12}
                 />
                 <YAxis
                   tickFormatter={(v: number) => {
-                    const k = v / 100;
-                    if (k >= 10000) return `€${(k / 1000).toFixed(0)}k`;
-                    if (k >= 1000) return `€${(k / 1000).toFixed(1)}k`;
-                    return `€${k.toFixed(0)}`;
+                    const units = v / 100;
+                    const abs = Math.abs(units);
+                    if (abs >= 1_000_000) return `${units < 0 ? "-" : ""}${(abs / 1_000_000).toFixed(1)}m`;
+                    if (abs >= 1_000) return `${units < 0 ? "-" : ""}${(abs / 1_000).toFixed(1)}k`;
+                    return `${units.toFixed(0)}`;
                   }}
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                   tickLine={false}
                   axisLine={false}
-                  width={52}
-                  tickMargin={4}
+                  width={56}
+                  tickMargin={8}
                 />
-                <Tooltip content={<CustomTooltip />} cursor={<CustomCursor />} />
+                <Tooltip content={<CustomTooltip />} cursor={<CustomCursor />} wrapperStyle={{ outline: "none" }} />
 
                 {/* Danger zone below payroll threshold */}
                 <ReferenceArea
@@ -333,13 +343,13 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
                   y={payrollThreshold}
                   stroke="hsl(var(--float-amber))"
                   strokeDasharray="6 4"
-                  strokeOpacity={0.6}
+                  strokeOpacity={0.72}
                   strokeWidth={1.5}
                   label={{
                     value: `Payroll ${formatCurrency(payrollThreshold)}`,
                     position: "right",
-                    fill: "hsl(var(--float-amber))",
-                    fontSize: 9,
+                    fill: "hsl(var(--float-amber) / 0.9)",
+                    fontSize: 10,
                     fontWeight: 600,
                   }}
                 />
@@ -349,11 +359,11 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
                   x="Today"
                   stroke="hsl(var(--primary))"
                   strokeDasharray="4 3"
-                  strokeOpacity={0.3}
+                  strokeOpacity={0.42}
                   label={{
                     value: "Today",
                     position: "top",
-                    fill: "hsl(var(--primary))",
+                    fill: "hsl(var(--primary) / 0.95)",
                     fontSize: 9,
                     fontWeight: 700,
                   }}
@@ -367,9 +377,9 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
                   fill="url(#balanceGrad)"
                   strokeWidth={2.5}
                   isAnimationActive={animate}
-                  animationDuration={2000}
+                  animationDuration={1450}
                   animationEasing="ease-out"
-                  animationBegin={0}
+                  animationBegin={90}
                   connectNulls={false}
                   dot={<TodayDot />}
                   activeDot={{
@@ -391,9 +401,9 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
                     strokeDasharray="4 3"
                     strokeOpacity={0.6}
                     isAnimationActive={animate}
-                    animationDuration={1500}
+                    animationDuration={1250}
                     animationEasing="ease-out"
-                    animationBegin={1200}
+                    animationBegin={760}
                     connectNulls={false}
                     dot={false}
                     activeDot={{ r: 4, strokeWidth: 2, fill: "hsl(var(--card))", stroke: "hsl(var(--float-green))" }}
@@ -411,9 +421,9 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
                     strokeDasharray="4 3"
                     strokeOpacity={0.6}
                     isAnimationActive={animate}
-                    animationDuration={1500}
+                    animationDuration={1250}
                     animationEasing="ease-out"
-                    animationBegin={1200}
+                    animationBegin={760}
                     connectNulls={false}
                     dot={false}
                     activeDot={{ r: 4, strokeWidth: 2, fill: "hsl(var(--card))", stroke: "hsl(var(--float-red))" }}
@@ -429,9 +439,9 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
                   strokeWidth={2}
                   strokeDasharray="6 3"
                   isAnimationActive={animate}
-                  animationDuration={2000}
+                  animationDuration={1550}
                   animationEasing="ease-out"
-                  animationBegin={800}
+                  animationBegin={360}
                   connectNulls={false}
                   dot={false}
                   activeDot={{
@@ -454,14 +464,14 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
 
         {/* Legend */}
         {hasData && (
-          <div className="flex items-center justify-center gap-5 pt-1 pb-1 flex-wrap">
-            <LegendItem color="bg-primary" label="Actual" />
-            <LegendItem color="bg-float-amber" label="Projected" dashed />
-            {showScenarios && <LegendItem color="bg-float-green" label="Best case" dashed />}
-            {showScenarios && <LegendItem color="bg-float-red" label="Worst case" dashed />}
-            <LegendItem color="bg-float-amber/50" label="Payroll threshold" dashed />
-            <div className="flex items-center gap-1.5">
-              <div className="h-3 w-4 rounded-sm bg-float-red/[0.06] border border-float-red/10" />
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+            <LegendItem color="hsl(var(--primary))" label="Actual" />
+            <LegendItem color="hsl(var(--float-amber))" label="Projected" dashed />
+            {showScenarios && <LegendItem color="hsl(var(--float-green))" label="Best case" dashed />}
+            {showScenarios && <LegendItem color="hsl(var(--float-red))" label="Worst case" dashed />}
+            <LegendItem color="hsl(var(--float-amber) / 0.72)" label="Payroll threshold" dashed />
+            <div className="flex items-center gap-2">
+              <div className="h-3 w-4 rounded-sm border border-float-red/20 bg-float-red/[0.09]" />
               <span className="text-[10px] text-muted-foreground">Danger zone</span>
             </div>
           </div>
@@ -494,17 +504,47 @@ function StatPill({ color, label, value, icon, dot, warning }: {
   dot?: boolean;
   warning?: boolean;
 }) {
+  const tone = {
+    primary: {
+      dot: "bg-primary",
+      icon: "text-primary",
+      value: "text-foreground",
+      warningSurface: "border-primary/20 bg-primary/[0.07]",
+    },
+    "float-red": {
+      dot: "bg-float-red",
+      icon: "text-float-red",
+      value: "text-float-red",
+      warningSurface: "border-float-red/20 bg-float-red/[0.06]",
+    },
+    "float-green": {
+      dot: "bg-float-green",
+      icon: "text-float-green",
+      value: "text-float-green",
+      warningSurface: "border-float-green/20 bg-float-green/[0.06]",
+    },
+    "float-amber": {
+      dot: "bg-float-amber",
+      icon: "text-float-amber",
+      value: "text-float-amber",
+      warningSurface: "border-float-amber/20 bg-float-amber/[0.08]",
+    },
+  }[color] ?? {
+    dot: "bg-primary",
+    icon: "text-primary",
+    value: "text-foreground",
+    warningSurface: "border-border/70 bg-background/70",
+  };
+
   return (
     <div className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 transition-all ${
-      warning ? `border-${color}/20 bg-${color}/[0.03]` : "border-border bg-card"
+      warning ? tone.warningSurface : "border-border/70 bg-background/70"
     }`}>
-      {dot && <div className={`h-2 w-2 rounded-full bg-${color}`} />}
-      {icon && <span className={`text-${color}`}>{icon}</span>}
+      {dot && <div className={`h-2 w-2 rounded-full ${tone.dot}`} />}
+      {icon && <span className={tone.icon}>{icon}</span>}
       <span className="text-[10px] text-muted-foreground">{label}</span>
       {value && (
-        <span className={`font-mono text-xs font-semibold tabular-nums ${
-          color === "float-red" ? "text-float-red" : "text-foreground"
-        }`}>
+        <span className={`font-mono text-xs font-semibold tabular-nums ${tone.value}`}>
           {value}
         </span>
       )}
@@ -514,12 +554,16 @@ function StatPill({ color, label, value, icon, dot, warning }: {
 
 function LegendItem({ color, label, dashed }: { color: string; label: string; dashed?: boolean }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-2">
       <div
-        className={`h-0.5 w-5 rounded-full ${color}`}
-        style={dashed ? { backgroundImage: `repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 8px)` } : undefined}
+        className="h-0.5 w-6 rounded-full"
+        style={
+          dashed
+            ? { backgroundImage: `repeating-linear-gradient(90deg, ${color} 0 6px, transparent 6px 10px)` }
+            : { backgroundColor: color }
+        }
       />
-      <span className="text-[10px] text-muted-foreground">{label}</span>
+      <span className="text-[10px] font-medium text-muted-foreground">{label}</span>
     </div>
   );
 }
@@ -543,7 +587,7 @@ function ScenarioSummary({ chartData, payrollThreshold }: {
   const bestPeak = bestVals.length > 0 ? Math.max(...bestVals) : 0;
 
   return (
-    <div className="mt-4 rounded-xl border border-border bg-accent/30 p-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div className="mt-4 rounded-2xl border border-border/60 bg-gradient-to-br from-accent/30 via-background/80 to-background p-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
       <div className="flex items-center gap-2 mb-3">
         <GitBranch size={14} className="text-primary" />
         <span className="text-xs font-semibold text-foreground">Scenario Analysis</span>

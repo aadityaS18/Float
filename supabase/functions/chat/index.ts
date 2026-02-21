@@ -1,5 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import {
+  ClaudeApiError,
+  claudeStreamAsOpenAiSse,
+  type ClaudeMessage,
+} from "../_shared/claude.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,121 +12,184 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+type IncidentEvent = {
+  type?: string;
+  message?: string;
+};
+
+type IncidentContextRow = {
+  title: string | null;
+  severity: string | null;
+  status: string | null;
+  shortfall_amount: number | null;
+  events: unknown;
+};
+
+type CallContextRow = {
+  client_name: string | null;
+  status: string | null;
+  outcome: string | null;
+  transcript: string | null;
+};
+
+function toClaudeMessages(rawMessages: unknown): ClaudeMessage[] {
+  if (!Array.isArray(rawMessages)) return [];
+
+  const messages: ClaudeMessage[] = [];
+  for (const item of rawMessages) {
+    if (!item || typeof item !== "object") continue;
+    const role = "role" in item ? item.role : undefined;
+    const content = "content" in item ? item.content : undefined;
+
+    if ((role !== "user" && role !== "assistant") || typeof content !== "string") {
+      continue;
+    }
+    if (!content.trim()) continue;
+    messages.push({ role, content });
+  }
+
+  return messages;
+}
+
+function buildSystemPrompt(incidentContext: string) {
+  return `You are Float AI, an expert AI CFO assistant for small businesses.
+
+You help business owners understand cashflow, invoices, payroll, and financial health.
+
+Rules:
+- Money is stored in cents/pence. Convert to EUR for display (divide by 100).
+- Be concise, actionable, and empathetic.
+- Use markdown formatting for clarity.
+- If asked about non-finance topics, politely redirect.
+- You continuously learn from past incidents and collection calls.
+- When referencing incidents, use phrasing like:
+  - "Based on what I learned from incident..."
+  - "From our past experience with..."
+${incidentContext}`;
+}
+
 serve(async (req) => {
-  if (req.method === "OPTIONS")
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
 
   try {
-    const { messages, account_id } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const body = await req.json();
+    const accountId = typeof body.account_id === "string" ? body.account_id : null;
+    const messages = toClaudeMessages(body.messages);
 
-    // Build incident context if account_id is provided
+    if (messages.length === 0) {
+      return new Response(JSON.stringify({ error: "No valid messages provided." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     let incidentContext = "";
-    if (account_id) {
+
+    if (accountId) {
       try {
-        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        const sb = createClient(supabaseUrl, supabaseKey);
+        const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+        const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+        if (supabaseUrl && serviceRoleKey) {
+          const sb = createClient(supabaseUrl, serviceRoleKey);
 
-        // Fetch resolved incidents with events
-        const { data: incidents } = await sb
-          .from("incidents")
-          .select("title, description, severity, status, shortfall_amount, events, opened_at, closed_at")
-          .eq("account_id", account_id)
-          .order("opened_at", { ascending: false })
-          .limit(20);
+          const { data: incidentsData } = await sb
+            .from("incidents")
+            .select("title, severity, status, shortfall_amount, events")
+            .eq("account_id", accountId)
+            .order("opened_at", { ascending: false })
+            .limit(20);
 
-        // Fetch recent calls with outcomes
-        const { data: calls } = await sb
-          .from("calls")
-          .select("client_name, status, outcome, duration_seconds, transcript")
-          .eq("account_id", account_id)
-          .order("initiated_at", { ascending: false })
-          .limit(10);
+          const { data: callsData } = await sb
+            .from("calls")
+            .select("client_name, status, outcome, transcript")
+            .eq("account_id", accountId)
+            .order("initiated_at", { ascending: false })
+            .limit(10);
 
-        if (incidents && incidents.length > 0) {
-          const summaries = incidents.map((inc) => {
-            const evts = Array.isArray(inc.events) ? inc.events : [];
-            const eventSummary = evts.map((e: any) => `${e.type}: ${e.message}`).join("; ");
-            const shortfall = inc.shortfall_amount ? `€${(inc.shortfall_amount / 100).toFixed(2)}` : "N/A";
-            return `- [${inc.severity}/${inc.status}] "${inc.title}" — Shortfall: ${shortfall}. Events: ${eventSummary || "none"}`;
-          }).join("\n");
+          const incidents = (incidentsData ?? []) as IncidentContextRow[];
+          const calls = (callsData ?? []) as CallContextRow[];
 
-          incidentContext += `\n\n## Past Incidents (AI Learnings)\nYou have learned from these incidents. Reference them when relevant:\n${summaries}`;
+          if (incidents.length > 0) {
+            const summaries = incidents
+              .map((incident) => {
+                const events = Array.isArray(incident.events)
+                  ? (incident.events as IncidentEvent[])
+                  : [];
+
+                const eventSummary = events
+                  .map((event) => {
+                    const eventType = event.type ?? "event";
+                    const eventMessage = event.message ?? "";
+                    return `${eventType}: ${eventMessage}`.trim();
+                  })
+                  .filter(Boolean)
+                  .join("; ");
+
+                const shortfall =
+                  typeof incident.shortfall_amount === "number"
+                    ? `EUR ${(incident.shortfall_amount / 100).toFixed(2)}`
+                    : "N/A";
+
+                return `- [${incident.severity ?? "unknown"}/${incident.status ?? "unknown"}] "${incident.title ?? "Untitled"}" - Shortfall: ${shortfall}. Events: ${eventSummary || "none"}`;
+              })
+              .join("\n");
+
+            incidentContext += `\n\n## Past Incidents (AI Learnings)\nReference these where relevant:\n${summaries}`;
+          }
+
+          if (calls.length > 0) {
+            const callSummaries = calls
+              .map((call) => {
+                const snippet = call.transcript ? ` Transcript snippet: ${call.transcript.slice(0, 200)}` : "";
+                return `- Call to ${call.client_name ?? "Unknown"} [${call.status ?? "unknown"}]: Outcome: ${call.outcome ?? "pending"}.${snippet}`;
+              })
+              .join("\n");
+
+            incidentContext += `\n\n## Call History Learnings\nReference these outcomes and patterns where relevant:\n${callSummaries}`;
+          }
         }
-
-        if (calls && calls.length > 0) {
-          const callSummaries = calls.map((c) => {
-            return `- Call to ${c.client_name} [${c.status}]: Outcome: ${c.outcome || "pending"}${c.transcript ? `. Key transcript: ${c.transcript.slice(0, 200)}` : ""}`;
-          }).join("\n");
-
-          incidentContext += `\n\n## Call History (AI Learnings from Calls)\nYou learned from these collection calls. Reference outcomes and patterns:\n${callSummaries}`;
-        }
-      } catch (e) {
-        console.error("Failed to fetch incident context:", e);
+      } catch (contextError) {
+        console.error("Failed to fetch context for chat:", contextError);
       }
     }
 
-    const systemPrompt = `You are Float AI — an expert AI CFO assistant for small businesses. You help business owners understand their cashflow, invoices, payroll, and financial health.
+    const stream = await claudeStreamAsOpenAiSse({
+      system: buildSystemPrompt(incidentContext),
+      messages,
+      maxTokens: 1400,
+      temperature: 0.3,
+    });
 
-Key facts:
-- Money is stored in pence/cents. Always convert to euros when displaying amounts (divide by 100).
-- You can analyze spending patterns, predict cashflow issues, and suggest optimizations.
-- Be concise, actionable, and empathetic. Business owners are busy.
-- Use markdown formatting for clarity: bold key numbers, use bullet points for lists.
-- If asked about something outside finance, politely redirect.
-- You continuously learn from past incidents and collection calls. When a user asks about past issues, payment patterns, or what happened before, reference your learnings.
-- When referencing incidents, say "Based on what I've learned from incident..." or "From our past experience with..."${incidentContext}`;
+    return new Response(stream, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  } catch (error) {
+    console.error("chat error:", error);
 
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            { role: "system", content: systemPrompt },
-            ...messages,
-          ],
-          stream: true,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      if (response.status === 429) {
+    if (error instanceof ClaudeApiError) {
+      if (error.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again shortly." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Usage limit reached. Please add credits." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
+
       return new Response(
-        JSON.stringify({ error: "AI service error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Claude API request failed." }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    return new Response(response.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-    });
-  } catch (e) {
-    console.error("chat error:", e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

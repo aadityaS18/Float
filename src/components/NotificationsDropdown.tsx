@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
+import { getDemoInsights, isDemoId } from "@/lib/demo-content";
 
 interface Notification {
   id: string;
@@ -19,7 +20,9 @@ interface Notification {
   created_at: string;
 }
 
-const typeConfig: Record<string, { icon: typeof Bell; color: string; badge: string }> = {
+type NotificationBadgeVariant = "destructive" | "secondary" | "outline";
+
+const typeConfig: Record<string, { icon: typeof Bell; color: string; badge: NotificationBadgeVariant }> = {
   critical: { icon: AlertTriangle, color: "text-destructive", badge: "destructive" },
   warning: { icon: AlertTriangle, color: "text-yellow-500", badge: "secondary" },
   info: { icon: Info, color: "text-blue-500", badge: "secondary" },
@@ -43,12 +46,21 @@ export function NotificationsDropdown() {
         .eq("dismissed", false)
         .order("created_at", { ascending: false })
         .limit(20);
-      if (data) setNotifications(data as Notification[]);
+      if (data && data.length > 0) {
+        setNotifications(data as Notification[]);
+        return;
+      }
+
+      setNotifications(getDemoInsights(account.id) as Notification[]);
     };
     fetch();
   }, [account?.id, open]);
 
   const dismiss = async (id: string) => {
+    if (isDemoId(id)) {
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      return;
+    }
     await supabase.from("ai_insights").update({ dismissed: true }).eq("id", id);
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
@@ -57,6 +69,10 @@ export function NotificationsDropdown() {
     if (!account?.id) return;
     const ids = notifications.map((n) => n.id);
     if (ids.length === 0) return;
+    if (ids.every((id) => isDemoId(id))) {
+      setNotifications([]);
+      return;
+    }
     await supabase.from("ai_insights").update({ dismissed: true }).in("id", ids);
     setNotifications([]);
   };
@@ -104,7 +120,7 @@ export function NotificationsDropdown() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start gap-2">
                         <p className="text-sm font-medium text-foreground leading-tight">{n.title}</p>
-                        <Badge variant={config.badge as any} className="shrink-0 text-[10px] px-1.5 py-0">
+                        <Badge variant={config.badge} className="shrink-0 text-[10px] px-1.5 py-0">
                           {n.type}
                         </Badge>
                       </div>
