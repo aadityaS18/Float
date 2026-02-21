@@ -12,12 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Unplug, Link2, LogOut, Trash2, Building2, Users, CreditCard, Calendar } from "lucide-react";
-import { formatCurrency } from "@/lib/format";
+import { Save, Unplug, Link2, LogOut, Trash2, Building2, Users, CreditCard, Calendar, Globe } from "lucide-react";
+import { formatCurrency, getCurrencySymbol } from "@/lib/format";
 
 const sectors = ["restaurant", "agency", "clinic", "construction", "retail", "other"];
 const frequencies = ["weekly", "biweekly", "monthly"];
 const days = ["monday", "tuesday", "wednesday", "thursday", "friday"];
+const currencies = ["EUR", "GBP", "USD"];
 
 export default function SettingsPage() {
   const navigate = useNavigate();
@@ -31,6 +32,7 @@ export default function SettingsPage() {
   const [payrollAmount, setPayrollAmount] = useState(String((account?.payroll_amount ?? 0) / 100));
   const [payrollFrequency, setPayrollFrequency] = useState(account?.payroll_frequency ?? "biweekly");
   const [payrollDay, setPayrollDay] = useState(account?.payroll_day ?? "friday");
+  const [currency, setCurrency] = useState((account as any)?.currency ?? "EUR");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -42,7 +44,8 @@ export default function SettingsPage() {
       payroll_amount: Math.round(parseFloat(payrollAmount) * 100) || 0,
       payroll_frequency: payrollFrequency,
       payroll_day: payrollDay,
-    });
+      currency,
+    } as any);
     setSaving(false);
     toast({ title: "Settings saved", description: "Your business details have been updated." });
   };
@@ -80,7 +83,7 @@ export default function SettingsPage() {
               <Label className="text-xs">Business Name</Label>
               <Input value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs">Sector</Label>
                 <Select value={sector} onValueChange={setSector}>
@@ -95,6 +98,17 @@ export default function SettingsPage() {
               <div className="space-y-1.5">
                 <Label className="text-xs flex items-center gap-1"><Users size={11} /> Employees</Label>
                 <Input type="number" value={employeeCount} onChange={(e) => setEmployeeCount(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs flex items-center gap-1"><Globe size={11} /> Currency</Label>
+                <Select value={currency} onValueChange={setCurrency}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {currencies.map((c) => (
+                      <SelectItem key={c} value={c}>{c} ({getCurrencySymbol(c)})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </CardContent>

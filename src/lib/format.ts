@@ -1,16 +1,32 @@
-export function formatCurrency(pence: number): string {
-  return new Intl.NumberFormat("en-IE", {
+const CURRENCY_CONFIG: Record<string, { symbol: string; locale: string; code: string }> = {
+  EUR: { symbol: "€", locale: "en-IE", code: "EUR" },
+  GBP: { symbol: "£", locale: "en-GB", code: "GBP" },
+  USD: { symbol: "$", locale: "en-US", code: "USD" },
+};
+
+function getCurrencyConfig(currency?: string) {
+  return CURRENCY_CONFIG[currency || "EUR"] || CURRENCY_CONFIG.EUR;
+}
+
+export function formatCurrency(pence: number, currency?: string): string {
+  const config = getCurrencyConfig(currency);
+  return new Intl.NumberFormat(config.locale, {
     style: "currency",
-    currency: "EUR",
+    currency: config.code,
   }).format(pence / 100);
 }
 
-export function formatCurrencyShort(pence: number): string {
-  const euros = pence / 100;
-  if (euros >= 1000) {
-    return `€${(euros / 1000).toFixed(1)}k`;
+export function formatCurrencyShort(pence: number, currency?: string): string {
+  const config = getCurrencyConfig(currency);
+  const value = pence / 100;
+  if (value >= 1000) {
+    return `${config.symbol}${(value / 1000).toFixed(1)}k`;
   }
-  return `€${euros.toFixed(0)}`;
+  return `${config.symbol}${value.toFixed(0)}`;
+}
+
+export function getCurrencySymbol(currency?: string): string {
+  return getCurrencyConfig(currency).symbol;
 }
 
 export function daysOverdue(dueDate: string): number {
