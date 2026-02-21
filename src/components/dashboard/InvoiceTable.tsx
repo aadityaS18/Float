@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { formatCurrency, daysOverdue, getInvoiceStatusColor } from "@/lib/format";
-import { Phone, CreditCard, Check, FileText, Plus, Pencil, Save } from "lucide-react";
+import { Phone, CreditCard, Check, FileText, Plus, Pencil, Save, Download } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -26,6 +26,7 @@ export function InvoiceTable({ invoices, onChase, onRefresh, payrollAtRisk }: In
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPhone, setEditPhone] = useState("");
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -58,8 +59,35 @@ export function InvoiceTable({ invoices, onChase, onRefresh, payrollAtRisk }: In
       toast({ variant: "destructive", title: "No phone number", description: "Add a phone number first by clicking the pencil icon" });
       return;
     }
-    // Navigate to calls page with invoice data to auto-start the call
     navigate("/calls", { state: { autoCallInvoice: inv } });
+  };
+
+  const handleDownloadPdf = async (inv: Invoice) => {
+    setDownloadingId(inv.id);
+    try {
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-invoice-pdf`;
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ invoice_id: inv.id, account_id: inv.account_id }),
+      });
+      if (!resp.ok) throw new Error("Failed to generate invoice");
+      const html = await resp.text();
+      const blob = new Blob([html], { type: "text/html" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${inv.invoice_number || "invoice"}.html`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast({ title: "Invoice downloaded", description: "Open the HTML file and use Print → Save as PDF" });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message });
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   return (
@@ -174,6 +202,15 @@ export function InvoiceTable({ invoices, onChase, onRefresh, payrollAtRisk }: In
                             <CreditCard size={11} className="mr-0.5" /> Link
                           </Button>
                         )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-[10px] text-muted-foreground"
+                          onClick={() => handleDownloadPdf(inv)}
+                          disabled={downloadingId === inv.id}
+                        >
+                          <Download size={11} className="mr-0.5" /> PDF
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>

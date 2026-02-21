@@ -1,8 +1,8 @@
-import { RefreshCw, Bell, Search } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { RefreshCw, Bell } from "lucide-react";
 import { useAccount } from "@/hooks/useAccount";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { NlQueryBar } from "@/components/dashboard/NlQueryBar";
 
 interface TopBarProps {
   title: string;
@@ -11,7 +11,6 @@ interface TopBarProps {
 }
 
 export function TopBar({ title, subtitle, insightCount = 0 }: TopBarProps) {
-  const navigate = useNavigate();
   const { account } = useAccount();
   const initials = account?.business_name
     ? account.business_name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()
@@ -24,13 +23,7 @@ export function TopBar({ title, subtitle, insightCount = 0 }: TopBarProps) {
         {subtitle && <p className="text-xs text-muted-foreground leading-tight">{subtitle}</p>}
       </div>
 
-      <button
-        onClick={() => navigate("/chat")}
-        className="mx-auto hidden sm:flex h-8 w-72 items-center gap-2 rounded-full border border-border bg-background/60 px-3.5 text-xs text-muted-foreground transition-all hover:border-primary/30 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
-      >
-        <Search size={13} className="shrink-0" />
-        <span className="truncate">Ask Float anything…</span>
-      </button>
+      <NlQueryBar />
 
       <div className="flex items-center gap-1">
         <Tooltip>

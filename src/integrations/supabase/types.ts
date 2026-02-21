@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           business_name: string
           created_at: string | null
+          currency: string
           employee_count: number | null
           id: string
           monzo_access_token: string | null
@@ -35,6 +36,7 @@ export type Database = {
         Insert: {
           business_name?: string
           created_at?: string | null
+          currency?: string
           employee_count?: number | null
           id?: string
           monzo_access_token?: string | null
@@ -52,6 +54,7 @@ export type Database = {
         Update: {
           business_name?: string
           created_at?: string | null
+          currency?: string
           employee_count?: number | null
           id?: string
           monzo_access_token?: string | null
