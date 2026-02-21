@@ -6,7 +6,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
 import { format, subDays } from "date-fns";
-import { Sparkles, TrendingDown, TrendingUp, Calendar, ArrowRight } from "lucide-react";
+import { Sparkles, TrendingDown, TrendingUp, Calendar, ArrowRight, GitBranch } from "lucide-react";
 import { CashflowDrilldown } from "./CashflowDrilldown";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -23,6 +23,7 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
   const [range, setRange] = useState<Range>("30d");
   const [animate, setAnimate] = useState(false);
   const [drilldown, setDrilldown] = useState<{ date: string; projected: number } | null>(null);
+  const [showScenarios, setShowScenarios] = useState(false);
   const today = new Date("2026-02-21");
 
   // Generate mock breakdown for a projected day
@@ -52,7 +53,7 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
 
   const chartData = useMemo(() => {
     const histDays = range === "14d" ? 14 : range === "60d" ? 60 : 30;
-    const data: { date: string; rawDate: Date; balance: number | null; projected: number | null; isToday?: boolean }[] = [];
+    const data: { date: string; rawDate: Date; balance: number | null; projected: number | null; bestCase: number | null; worstCase: number | null; isToday?: boolean }[] = [];
 
     let bal = 980000;
     for (let i = Math.max(histDays, 60); i >= 1; i--) {
@@ -62,16 +63,24 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
       else bal -= 40000;
       if (d.getDate() === 1) bal -= 320000;
       if (i <= histDays) {
-        data.push({ date: format(d, "MMM d"), rawDate: d, balance: bal, projected: null });
+        data.push({ date: format(d, "MMM d"), rawDate: d, balance: bal, projected: null, bestCase: null, worstCase: null });
       }
     }
 
-    data.push({ date: "Today", rawDate: today, balance: 620000, projected: 620000, isToday: true });
+    data.push({ date: "Today", rawDate: today, balance: 620000, projected: 620000, bestCase: 620000, worstCase: 620000, isToday: true });
 
-    projections.forEach((p) => {
+    projections.forEach((p, idx) => {
       const d = new Date(p.projection_date);
       if (d <= today) return;
-      data.push({ date: format(d, "MMM d"), rawDate: d, balance: null, projected: p.projected_balance });
+      const factor = (idx + 1) * 0.03;
+      data.push({
+        date: format(d, "MMM d"),
+        rawDate: d,
+        balance: null,
+        projected: p.projected_balance,
+        bestCase: Math.round(p.projected_balance * (1 + factor + 0.05)),
+        worstCase: Math.round(p.projected_balance * (1 - factor - 0.03)),
+      });
     });
 
     return data;
@@ -102,6 +111,8 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
     if (!active || !payload?.length) return null;
     const balVal = payload.find((p: any) => p.dataKey === "balance")?.value;
     const projVal = payload.find((p: any) => p.dataKey === "projected")?.value;
+    const bestVal = payload.find((p: any) => p.dataKey === "bestCase")?.value;
+    const worstVal = payload.find((p: any) => p.dataKey === "worstCase")?.value;
     const val = balVal ?? projVal;
     if (val == null) return null;
     const isProjected = balVal == null;
@@ -116,6 +127,18 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
           <p className="mt-0.5 flex items-center gap-1 text-[9px] text-primary font-medium">
             <Sparkles size={8} /> AI projected
           </p>
+        )}
+        {showScenarios && bestVal != null && worstVal != null && (
+          <div className="mt-1.5 space-y-0.5 border-t border-border pt-1.5">
+            <p className="flex items-center justify-between gap-3 text-[10px]">
+              <span className="text-float-green font-medium">Best case</span>
+              <span className="font-mono font-semibold tabular-nums text-float-green">{formatCurrency(bestVal)}</span>
+            </p>
+            <p className="flex items-center justify-between gap-3 text-[10px]">
+              <span className="text-float-red font-medium">Worst case</span>
+              <span className="font-mono font-semibold tabular-nums text-float-red">{formatCurrency(worstVal)}</span>
+            </p>
+          </div>
         )}
         {val < payrollThreshold && (
           <p className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-float-red">
@@ -170,20 +193,33 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
             <Sparkles size={10} /> AI-powered
           </span>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-border bg-accent/50 p-0.5">
-          {(["14d", "30d", "60d"] as const).map((r) => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all duration-200 ${
-                range === r
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {r === "14d" ? "2W" : r === "30d" ? "1M" : "2M"}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-accent/50 p-0.5">
+            {(["14d", "30d", "60d"] as const).map((r) => (
+              <button
+                key={r}
+                onClick={() => setRange(r)}
+                className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all duration-200 ${
+                  range === r
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {r === "14d" ? "2W" : r === "30d" ? "1M" : "2M"}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setShowScenarios((s) => !s)}
+            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[10px] font-medium transition-all duration-200 ${
+              showScenarios
+                ? "border-primary/30 bg-primary/10 text-primary"
+                : "border-border bg-accent/50 text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <GitBranch size={10} />
+            Scenarios
+          </button>
         </div>
       </CardHeader>
 
@@ -244,6 +280,14 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
                   <linearGradient id="dangerGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="hsl(var(--float-red))" stopOpacity={0.06} />
                     <stop offset="100%" stopColor="hsl(var(--float-red))" stopOpacity={0.01} />
+                  </linearGradient>
+                  <linearGradient id="bestCaseGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--float-green))" stopOpacity={0.12} />
+                    <stop offset="100%" stopColor="hsl(var(--float-green))" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="worstCaseGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--float-red))" stopOpacity={0.1} />
+                    <stop offset="100%" stopColor="hsl(var(--float-red))" stopOpacity={0} />
                   </linearGradient>
                 </defs>
 
@@ -336,6 +380,46 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
                   }}
                 />
 
+                {/* Best case scenario */}
+                {showScenarios && (
+                  <Area
+                    type="monotone"
+                    dataKey="bestCase"
+                    stroke="hsl(var(--float-green))"
+                    fill="url(#bestCaseGrad)"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                    strokeOpacity={0.6}
+                    isAnimationActive={animate}
+                    animationDuration={1500}
+                    animationEasing="ease-out"
+                    animationBegin={1200}
+                    connectNulls={false}
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 2, fill: "hsl(var(--card))", stroke: "hsl(var(--float-green))" }}
+                  />
+                )}
+
+                {/* Worst case scenario */}
+                {showScenarios && (
+                  <Area
+                    type="monotone"
+                    dataKey="worstCase"
+                    stroke="hsl(var(--float-red))"
+                    fill="url(#worstCaseGrad)"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                    strokeOpacity={0.6}
+                    isAnimationActive={animate}
+                    animationDuration={1500}
+                    animationEasing="ease-out"
+                    animationBegin={1200}
+                    connectNulls={false}
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 2, fill: "hsl(var(--card))", stroke: "hsl(var(--float-red))" }}
+                  />
+                )}
+
                 {/* Projected balance — clickable */}
                 <Area
                   type="monotone"
@@ -370,9 +454,11 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
 
         {/* Legend */}
         {hasData && (
-          <div className="flex items-center justify-center gap-5 pt-1 pb-1">
+          <div className="flex items-center justify-center gap-5 pt-1 pb-1 flex-wrap">
             <LegendItem color="bg-primary" label="Actual" />
             <LegendItem color="bg-float-amber" label="Projected" dashed />
+            {showScenarios && <LegendItem color="bg-float-green" label="Best case" dashed />}
+            {showScenarios && <LegendItem color="bg-float-red" label="Worst case" dashed />}
             <LegendItem color="bg-float-amber/50" label="Payroll threshold" dashed />
             <div className="flex items-center gap-1.5">
               <div className="h-3 w-4 rounded-sm bg-float-red/[0.06] border border-float-red/10" />
