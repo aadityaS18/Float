@@ -45,6 +45,8 @@ export default function DashboardPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "invoices", filter: `account_id=eq.${account.id}` }, (payload) => {
         if (payload.eventType === "UPDATE") {
           setInvoices((prev) => prev.map((i) => (i.id === (payload.new as Invoice).id ? payload.new as Invoice : i)));
+        } else if (payload.eventType === "INSERT") {
+          setInvoices((prev) => [payload.new as Invoice, ...prev]);
         }
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "ai_insights", filter: `account_id=eq.${account.id}` }, () => {
