@@ -7,6 +7,7 @@ import { formatCurrency, daysOverdue, getInvoiceStatusColor } from "@/lib/format
 import { Phone, CreditCard, Check, FileText, Plus, Pencil, Save } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { InvoiceUploadDialog } from "./InvoiceUploadDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -26,6 +27,7 @@ export function InvoiceTable({ invoices, onChase, onRefresh, payrollAtRisk }: In
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPhone, setEditPhone] = useState("");
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const sorted = [...invoices].sort((a, b) => {
     const order: Record<string, number> = { overdue: 0, chasing: 1, unpaid: 2, upcoming: 3, paid: 4 };
@@ -49,6 +51,15 @@ export function InvoiceTable({ invoices, onChase, onRefresh, payrollAtRisk }: In
       onRefresh?.();
     }
     setEditingId(null);
+  };
+
+  const handleChase = (inv: Invoice) => {
+    if (!inv.client_phone) {
+      toast({ variant: "destructive", title: "No phone number", description: "Add a phone number first by clicking the pencil icon" });
+      return;
+    }
+    // Navigate to calls page with invoice data to auto-start the call
+    navigate("/calls", { state: { autoCallInvoice: inv } });
   };
 
   return (
@@ -149,7 +160,7 @@ export function InvoiceTable({ invoices, onChase, onRefresh, payrollAtRisk }: In
                     <TableCell className="py-3 text-right">
                       <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                         {inv.status === "overdue" && (
-                          <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-float-red" onClick={onChase}>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-float-red" onClick={() => handleChase(inv)}>
                             <Phone size={11} className="mr-0.5" /> Chase
                           </Button>
                         )}

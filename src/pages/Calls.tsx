@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Phone, PhoneOff, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { useAccount } from "@/hooks/useAccount";
 import { supabase } from "@/integrations/supabase/client";
 import { useConversation } from "@elevenlabs/react";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "react-router-dom";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/format";
 import type { Tables } from "@/integrations/supabase/types";
@@ -34,6 +35,7 @@ const statusColor: Record<string, string> = {
 export default function CallsPage() {
   const { account } = useAccount();
   const { toast } = useToast();
+  const location = useLocation();
   const [calls, setCalls] = useState<Call[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +44,7 @@ export default function CallsPage() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [callTimer, setCallTimer] = useState(0);
   const [timerInterval, setTimerInterval] = useState<ReturnType<typeof setInterval> | null>(null);
+  const autoCallTriggered = useRef(false);
 
   const conversation = useConversation({
     onConnect: () => {
@@ -89,10 +92,16 @@ export default function CallsPage() {
     return () => { supabase.removeChannel(channel); };
   }, [account]);
 
-  const overdueInvoices = useMemo(
-    () => invoices.filter((i) => i.status === "overdue" && i.client_phone),
-    [invoices]
-  );
+  // Auto-start call when navigated from Dashboard Chase button
+  useEffect(() => {
+    const state = location.state as { autoCallInvoice?: Invoice } | null;
+    if (state?.autoCallInvoice && account && !autoCallTriggered.current && !loading) {
+      autoCallTriggered.current = true;
+      startCall(state.autoCallInvoice);
+      // Clear the state so refreshing doesn't re-trigger
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, account, loading]);
 
   const startCall = useCallback(async (invoice: Invoice) => {
     if (!invoice.client_phone) {
@@ -121,9 +130,21 @@ export default function CallsPage() {
         });
       }
 
+      // Start conversation with context about the invoice
+      const amountFormatted = formatCurrency(invoice.amount);
+      const dueDate = invoice.due_date ? format(new Date(invoice.due_date), "MMMM d, yyyy") : "unknown";
+
       await conversation.startSession({
         conversationToken: data.token,
         connectionType: "webrtc",
+        overrides: {
+          agent: {
+            prompt: {
+              prompt: `You are a professional but firm collections agent calling on behalf of a business. You are calling ${invoice.client_name} about an overdue invoice (${invoice.invoice_number}) for ${amountFormatted} that was due on ${dueDate}. Your goal is to collect full payment immediately. Be polite but persistent. Ask when they can pay. If they commit to paying, confirm the amount and timeline. Do not accept partial payment — the full amount of ${amountFormatted} is required. End the call by confirming next steps.`,
+            },
+            firstMessage: `Hello, this is a call regarding an overdue invoice. Am I speaking with someone from ${invoice.client_name}?`,
+          },
+        },
       });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Failed to start", description: err.message });
@@ -136,6 +157,11 @@ export default function CallsPage() {
   const endCall = useCallback(async () => {
     await conversation.endSession();
   }, [conversation]);
+
+  const overdueInvoices = useMemo(
+    () => invoices.filter((i) => i.status === "overdue" && i.client_phone),
+    [invoices]
+  );
 
   const formatDuration = (s: number) => {
     const m = Math.floor(s / 60);
