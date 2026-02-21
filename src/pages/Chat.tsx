@@ -178,6 +178,7 @@ export default function ChatPage() {
               </p>
               <div className="mt-6 flex flex-wrap justify-center gap-2">
                 {[
+                  "What did Float learn from past incidents?",
                   "What's my cashflow outlook?",
                   "Which invoices are overdue?",
                   "Can I afford payroll this month?",
