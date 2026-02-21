@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.elevenlabs-conversation-token]
 verify_jwt = false
+
+[functions.make-call]
+verify_jwt = false
+
+[functions.twilio-status-callback]
+verify_jwt = false

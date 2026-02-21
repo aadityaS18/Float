@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Phone, PhoneOff, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,14 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAccount } from "@/hooks/useAccount";
 import { supabase } from "@/integrations/supabase/client";
-import { useConversation } from "@elevenlabs/react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "react-router-dom";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/format";
 import type { Tables } from "@/integrations/supabase/types";
-
-const AGENT_ID = "agent_0301khzyjj0ee34tfg0e1hcqjbjx";
 
 type Call = Tables<"calls">;
 type Invoice = Tables<"invoices">;
@@ -40,28 +37,7 @@ export default function CallsPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCall, setSelectedCall] = useState<Call | null>(null);
-  const [activeInvoice, setActiveInvoice] = useState<Invoice | null>(null);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [callTimer, setCallTimer] = useState(0);
-  const [timerInterval, setTimerInterval] = useState<ReturnType<typeof setInterval> | null>(null);
-  const autoCallTriggered = useRef(false);
-
-  const conversation = useConversation({
-    onConnect: () => {
-      toast({ title: "Connected", description: "Voice agent is ready — speak now" });
-      const interval = setInterval(() => setCallTimer((t) => t + 1), 1000);
-      setTimerInterval(interval);
-    },
-    onDisconnect: () => {
-      if (timerInterval) clearInterval(timerInterval);
-      setCallTimer(0);
-      setActiveInvoice(null);
-    },
-    onError: (error) => {
-      console.error("Conversation error:", error);
-      toast({ variant: "destructive", title: "Connection Error", description: "Voice agent disconnected" });
-    },
-  });
+  const [callingInvoiceId, setCallingInvoiceId] = useState<string | null>(null);
 
   // Fetch calls + overdue invoices
   useEffect(() => {
@@ -95,10 +71,8 @@ export default function CallsPage() {
   // Auto-start call when navigated from Dashboard Chase button
   useEffect(() => {
     const state = location.state as { autoCallInvoice?: Invoice } | null;
-    if (state?.autoCallInvoice && account && !autoCallTriggered.current && !loading) {
-      autoCallTriggered.current = true;
+    if (state?.autoCallInvoice && account && !loading) {
       startCall(state.autoCallInvoice);
-      // Clear the state so refreshing doesn't re-trigger
       window.history.replaceState({}, document.title);
     }
   }, [location.state, account, loading]);
@@ -108,55 +82,52 @@ export default function CallsPage() {
       toast({ variant: "destructive", title: "No phone number", description: "Add a phone number to this client first in the Dashboard" });
       return;
     }
-    setIsConnecting(true);
-    setActiveInvoice(invoice);
+    setCallingInvoiceId(invoice.id);
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      const { data, error } = await supabase.functions.invoke("elevenlabs-conversation-token", {
-        body: { agentId: AGENT_ID },
-      });
-
-      if (error || !data?.token) throw new Error(error?.message || "No token received");
-
-      // Create call record
+      // Create call record first
+      let callId: string | undefined;
       if (account) {
-        await supabase.from("calls").insert({
+        const { data: callRecord } = await supabase.from("calls").insert({
           account_id: account.id,
           invoice_id: invoice.id,
           client_name: invoice.client_name,
           client_phone: invoice.client_phone,
           status: "initiated",
-        });
+        }).select().single();
+        callId = callRecord?.id;
       }
 
-      // Start conversation with context about the invoice
-      const amountFormatted = formatCurrency(invoice.amount);
-      const dueDate = invoice.due_date ? format(new Date(invoice.due_date), "MMMM d, yyyy") : "unknown";
-
-      await conversation.startSession({
-        conversationToken: data.token,
-        connectionType: "webrtc",
-        overrides: {
-          agent: {
-            prompt: {
-              prompt: `You are a professional but firm collections agent calling on behalf of a business. You are calling ${invoice.client_name} about an overdue invoice (${invoice.invoice_number}) for ${amountFormatted} that was due on ${dueDate}. Your goal is to collect full payment immediately. Be polite but persistent. Ask when they can pay. If they commit to paying, confirm the amount and timeline. Do not accept partial payment — the full amount of ${amountFormatted} is required. End the call by confirming next steps.`,
-            },
-            firstMessage: `Hello, this is a call regarding an overdue invoice. Am I speaking with someone from ${invoice.client_name}?`,
-          },
+      // Trigger Twilio outbound call
+      const { data, error } = await supabase.functions.invoke("make-call", {
+        body: {
+          to: invoice.client_phone,
+          clientName: invoice.client_name,
+          invoiceNumber: invoice.invoice_number,
+          amount: invoice.amount,
+          dueDate: invoice.due_date ? format(new Date(invoice.due_date), "MMMM d, yyyy") : undefined,
+          callId,
         },
       });
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Failed to start", description: err.message });
-      setActiveInvoice(null);
-    } finally {
-      setIsConnecting(false);
-    }
-  }, [conversation, toast, account]);
 
-  const endCall = useCallback(async () => {
-    await conversation.endSession();
-  }, [conversation]);
+      if (error || !data?.success) {
+        throw new Error(error?.message || data?.error || "Failed to initiate call");
+      }
+
+      // Update call status to in-progress
+      if (callId) {
+        await supabase.from("calls").update({ status: "in-progress" }).eq("id", callId);
+      }
+
+      toast({
+        title: "📞 Call initiated!",
+        description: `Calling ${invoice.client_name} at ${invoice.client_phone}. They will receive the collection message.`,
+      });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Call failed", description: err.message });
+    } finally {
+      setCallingInvoiceId(null);
+    }
+  }, [toast, account]);
 
   const overdueInvoices = useMemo(
     () => invoices.filter((i) => i.status === "overdue" && i.client_phone),
@@ -173,115 +144,73 @@ export default function CallsPage() {
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-6 py-4">
         <h1 className="text-lg font-semibold text-foreground">Collection Calls</h1>
-        <p className="text-sm text-muted-foreground">AI voice agent for chasing overdue invoices</p>
+        <p className="text-sm text-muted-foreground">AI-powered phone calls to chase overdue invoices via Twilio</p>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Overdue invoices to call */}
         <div className="flex w-96 flex-col border-r border-border">
-          {conversation.status === "connected" && activeInvoice ? (
-            <div className="flex flex-col items-center gap-4 p-6">
-              <Card className="w-full">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Active Call</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{activeInvoice.client_name}</p>
-                    <p className="text-xs text-muted-foreground">{activeInvoice.client_phone}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Invoice: {activeInvoice.invoice_number} · {formatCurrency(activeInvoice.amount)}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col items-center gap-3 rounded-xl bg-primary/5 p-6">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 animate-pulse rounded-full bg-float-green" />
-                      <span className="text-sm font-medium text-foreground">
-                        {conversation.isSpeaking ? "Agent speaking" : "Listening"}
-                      </span>
-                    </div>
-
-                    <div className="flex h-10 items-end gap-0.5">
-                      {Array.from({ length: 14 }).map((_, i) => (
-                        <div
-                          key={i}
-                          className="w-1 rounded-full bg-primary animate-soundwave"
-                          style={{
-                            "--wave-height": `${12 + Math.random() * 20}px`,
-                            "--wave-duration": `${0.5 + Math.random() * 0.6}s`,
-                            animationDelay: `${i * 0.05}s`,
-                          } as React.CSSProperties}
-                        />
-                      ))}
-                    </div>
-
-                    <span className="font-mono text-lg tabular-nums text-foreground">
-                      {formatDuration(callTimer)}
-                    </span>
-                  </div>
-
-                  <Button onClick={endCall} variant="destructive" className="w-full">
-                    <PhoneOff className="mr-2 h-4 w-4" /> End Call
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          ) : (
-            <div className="flex flex-col">
-              <div className="border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold text-foreground">Overdue — Ready to Call</h2>
-                <p className="text-xs text-muted-foreground">Click to start an AI collection call</p>
+          <div className="border-b border-border px-4 py-3">
+            <h2 className="text-sm font-semibold text-foreground">Overdue — Ready to Call</h2>
+            <p className="text-xs text-muted-foreground">Click to call the client's phone with a collection message</p>
+          </div>
+          <ScrollArea className="flex-1">
+            {loading ? (
+              <div className="flex items-center justify-center py-12 text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
               </div>
-              <ScrollArea className="flex-1">
-                {loading ? (
-                  <div className="flex items-center justify-center py-12 text-muted-foreground">
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
-                  </div>
-                ) : overdueInvoices.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-                    <Phone className="mb-3 h-10 w-10 text-muted-foreground/40" />
-                    <p className="text-sm text-muted-foreground">No overdue invoices with phone numbers</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Add phone numbers to overdue clients in the Dashboard to enable calling
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-1 p-2">
-                    {overdueInvoices.map((inv) => (
-                      <button
-                        key={inv.id}
-                        onClick={() => startCall(inv)}
-                        disabled={isConnecting}
-                        className="w-full rounded-lg border border-border bg-card p-3 text-left transition-colors hover:bg-accent/50 disabled:opacity-50"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">{inv.client_name}</p>
-                            <p className="text-xs text-muted-foreground">{inv.client_phone}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-semibold font-mono tabular-nums text-foreground">
-                              {formatCurrency(inv.amount)}
-                            </p>
-                            <p className="text-[10px] text-float-red">
-                              {inv.due_date && `Due ${format(new Date(inv.due_date), "MMM d")}`}
-                            </p>
-                          </div>
+            ) : overdueInvoices.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+                <Phone className="mb-3 h-10 w-10 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">No overdue invoices with phone numbers</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Add phone numbers to overdue clients in the Dashboard to enable calling
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1 p-2">
+                {overdueInvoices.map((inv) => {
+                  const isCalling = callingInvoiceId === inv.id;
+                  return (
+                    <button
+                      key={inv.id}
+                      onClick={() => startCall(inv)}
+                      disabled={!!callingInvoiceId}
+                      className="w-full rounded-lg border border-border bg-card p-3 text-left transition-colors hover:bg-accent/50 disabled:opacity-50"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{inv.client_name}</p>
+                          <p className="text-xs text-muted-foreground">{inv.client_phone}</p>
                         </div>
-                        <div className="mt-2 flex items-center gap-1.5">
-                          <Phone size={11} className="text-primary" />
-                          <span className="text-xs text-primary font-medium">
-                            {isConnecting ? "Connecting…" : "Start AI Call"}
-                          </span>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold font-mono tabular-nums text-foreground">
+                            {formatCurrency(inv.amount)}
+                          </p>
+                          <p className="text-[10px] text-float-red">
+                            {inv.due_date && `Due ${format(new Date(inv.due_date), "MMM d")}`}
+                          </p>
                         </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </ScrollArea>
-            </div>
-          )}
+                      </div>
+                      <div className="mt-2 flex items-center gap-1.5">
+                        {isCalling ? (
+                          <>
+                            <Loader2 size={11} className="animate-spin text-primary" />
+                            <span className="text-xs text-primary font-medium">Calling…</span>
+                          </>
+                        ) : (
+                          <>
+                            <Phone size={11} className="text-primary" />
+                            <span className="text-xs text-primary font-medium">Call Now</span>
+                          </>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
         </div>
 
         {/* Right: Call history */}
@@ -299,7 +228,7 @@ export default function CallsPage() {
                 <Phone className="mb-3 h-10 w-10 text-muted-foreground/40" />
                 <p className="text-sm text-muted-foreground">No calls yet</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Select an overdue invoice on the left to start a collection call
+                  Select an overdue invoice on the left to make a collection call
                 </p>
               </div>
             ) : (
