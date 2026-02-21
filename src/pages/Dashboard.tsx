@@ -70,43 +70,56 @@ export default function DashboardPage() {
     <>
       <TopBar title="Dashboard" subtitle={account?.business_name ?? undefined} insightCount={insights.length} />
 
-      <div className="space-y-6 p-4 lg:p-6">
+      <div className="space-y-8 p-5 lg:px-8 lg:py-6">
+
+        {/* Crisis Banner */}
+        {account?.payroll_at_risk && (
+          <section className="animate-fade-in-up">
+            <CrisisBanner account={account} onFixIt={() => setShowFixIt(true)} />
+          </section>
+        )}
 
         {/* KPI Cards */}
         <section className="animate-fade-in-up" style={{ animationDelay: "100ms" }}>
+          <SectionHeader title="Overview" />
           <KpiCards account={account} invoices={invoices} />
         </section>
 
         {/* Cashflow Chart */}
         <section className="animate-fade-in-up" style={{ animationDelay: "200ms" }}>
+          <SectionHeader title="Cashflow Forecast" />
           <CashflowChart projections={projections} payrollThreshold={account?.payroll_amount ?? 840000} />
         </section>
 
         {/* Invoices + Insights */}
-        <section className="grid grid-cols-1 gap-5 lg:grid-cols-5 animate-fade-in-up" style={{ animationDelay: "300ms" }}>
-          <div className="lg:col-span-3">
-            <InvoiceTable
-              invoices={invoices}
-              onChase={() => setShowFixIt(true)}
-              payrollAtRisk={account?.payroll_at_risk ?? false}
-            />
-          </div>
-          <div className="lg:col-span-2">
-            <AiInsightsPanel
-              insights={insights}
-              onDismiss={async (id) => {
-                await supabase.from("ai_insights").update({ dismissed: true }).eq("id", id);
-                setInsights((prev) => prev.filter((i) => i.id !== id));
-              }}
-              onAction={(type) => {
-                if (type === "fix_it") setShowFixIt(true);
-              }}
-            />
+        <section className="animate-fade-in-up" style={{ animationDelay: "300ms" }}>
+          <SectionHeader title="Receivables & Insights" />
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+            <div className="lg:col-span-3">
+              <InvoiceTable
+                invoices={invoices}
+                onChase={() => setShowFixIt(true)}
+                payrollAtRisk={account?.payroll_at_risk ?? false}
+              />
+            </div>
+            <div className="lg:col-span-2">
+              <AiInsightsPanel
+                insights={insights}
+                onDismiss={async (id) => {
+                  await supabase.from("ai_insights").update({ dismissed: true }).eq("id", id);
+                  setInsights((prev) => prev.filter((i) => i.id !== id));
+                }}
+                onAction={(type) => {
+                  if (type === "fix_it") setShowFixIt(true);
+                }}
+              />
+            </div>
           </div>
         </section>
 
         {/* Benchmarks */}
         <section className="animate-fade-in-up" style={{ animationDelay: "400ms" }}>
+          <SectionHeader title="Performance" />
           <BenchmarkPanel />
         </section>
       </div>
@@ -115,5 +128,15 @@ export default function DashboardPage() {
         <FixItModal incident={openIncident} onClose={() => setShowFixIt(false)} />
       )}
     </>
+  );
+}
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <div className="h-1 w-1 rounded-full bg-primary" />
+      <h2 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{title}</h2>
+      <div className="h-px flex-1 bg-border/50" />
+    </div>
   );
 }

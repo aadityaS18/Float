@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Clock } from "lucide-react";
+import { AlertTriangle, Clock, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/format";
 import type { Account } from "@/hooks/useAccount";
@@ -35,30 +35,23 @@ export function CrisisBanner({ account, onFixIt }: CrisisBannerProps) {
 
   // Healthy
   if (account.risk_level === "healthy" || (!account.payroll_at_risk && account.risk_level !== "warning")) {
-    return (
-      <div className="flex items-center gap-2.5 rounded-xl border border-float-green/20 bg-float-green/5 px-5 py-3.5">
-        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-float-green/15">
-          <span className="text-xs">✓</span>
-        </div>
-        <div>
-          <span className="text-sm font-medium text-float-green">Cashflow healthy</span>
-          <span className="ml-2 text-xs text-muted-foreground">47 days runway · Payroll covered · No action needed</span>
-        </div>
-      </div>
-    );
+    return null; // Crisis banner only shows for warning/critical
   }
 
   // Warning
   if (account.risk_level === "warning") {
     return (
-      <div className="flex items-center justify-between rounded-xl border border-float-amber/20 bg-float-amber/5 px-5 py-3.5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-float-amber/15">
-            <AlertTriangle size={13} className="text-float-amber" />
+      <div className="flex items-center justify-between rounded-xl border border-float-amber/20 bg-float-amber/[0.04] px-5 py-3.5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-float-amber/10">
+            <AlertTriangle size={14} className="text-float-amber" />
           </div>
-          <span className="text-sm font-medium text-float-amber">Cashflow pressure detected this week</span>
+          <div>
+            <span className="text-sm font-semibold text-foreground">Cashflow pressure detected</span>
+            <p className="text-[11px] text-muted-foreground">Potential shortfall this week — review your outstanding invoices</p>
+          </div>
         </div>
-        <Button variant="ghost" size="sm" className="text-xs text-float-amber hover:text-float-amber">
+        <Button variant="ghost" size="sm" className="text-xs font-medium text-float-amber hover:text-float-amber">
           View details →
         </Button>
       </div>
@@ -67,50 +60,54 @@ export function CrisisBanner({ account, onFixIt }: CrisisBannerProps) {
 
   // Critical
   return (
-    <div className="overflow-hidden rounded-xl border border-float-red/20 bg-gradient-to-br from-float-red/5 via-float-red/[0.03] to-transparent">
-      <div className="p-6">
+    <div className="overflow-hidden rounded-2xl border border-float-red/20 bg-gradient-to-br from-float-red/[0.04] via-float-red/[0.02] to-transparent">
+      <div className="p-6 lg:p-8">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-float-red/15">
-              <AlertTriangle size={14} className="text-float-red" />
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-float-red/10 animate-pulse-red">
+              <AlertTriangle size={16} className="text-float-red" />
             </div>
-            <span className="text-sm font-bold uppercase tracking-wide text-float-red">Payroll at Risk</span>
+            <div>
+              <span className="text-sm font-bold uppercase tracking-wide text-float-red">Payroll at Risk</span>
+              <p className="text-[11px] text-muted-foreground">8 employees waiting — action required</p>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
             <Clock size={12} />
             <span>Friday Feb 27</span>
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-4">
-          <div className="rounded-lg bg-card/60 p-3 text-center">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Payroll Due</p>
-            <p className="mt-1 font-mono text-lg font-bold tabular-nums text-foreground">{formatCurrency(payroll)}</p>
-          </div>
-          <div className="rounded-lg bg-card/60 p-3 text-center">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Balance</p>
-            <p className="mt-1 font-mono text-lg font-bold tabular-nums text-foreground">{formatCurrency(balance)}</p>
-          </div>
-          <div className="rounded-lg bg-float-red/[0.06] p-3 text-center">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-float-red">Shortfall</p>
-            <p className="mt-1 font-mono text-lg font-bold tabular-nums text-float-red">−{formatCurrency(shortfall)}</p>
-          </div>
+        <div className="mt-6 grid grid-cols-3 gap-4">
+          <CrisisStatBox label="Payroll Due" value={formatCurrency(payroll)} />
+          <CrisisStatBox label="Balance" value={formatCurrency(balance)} />
+          <CrisisStatBox label="Shortfall" value={`−${formatCurrency(shortfall)}`} danger />
         </div>
 
-        <div className="mt-5 flex items-center justify-between">
+        <div className="mt-6 flex items-center justify-between rounded-xl border border-border/50 bg-card/50 p-4">
           <div>
             <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Time remaining</p>
-            <p className="mt-0.5 font-mono text-3xl font-bold tabular-nums tracking-widest text-foreground">{countdown}</p>
+            <p className="mt-1 font-mono text-4xl font-bold tabular-nums tracking-wider text-foreground">{countdown}</p>
           </div>
           <Button
             onClick={onFixIt}
             size="lg"
-            className="rounded-full bg-float-red-deep px-8 font-bold text-primary-foreground shadow-lg transition-all hover:bg-float-red hover:shadow-xl animate-pulse-red"
+            className="rounded-xl bg-float-red-deep px-8 font-bold text-primary-foreground shadow-lg transition-all hover:bg-float-red hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] animate-pulse-red"
           >
+            <Zap size={16} className="mr-2" />
             Fix It Now
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CrisisStatBox({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
+  return (
+    <div className={`rounded-xl p-4 text-center ${danger ? "bg-float-red/[0.05] border border-float-red/10" : "bg-card border border-border"}`}>
+      <p className={`text-[10px] font-medium uppercase tracking-wider ${danger ? "text-float-red" : "text-muted-foreground"}`}>{label}</p>
+      <p className={`mt-2 font-mono text-xl font-bold tabular-nums leading-none ${danger ? "text-float-red" : "text-foreground"}`}>{value}</p>
     </div>
   );
 }

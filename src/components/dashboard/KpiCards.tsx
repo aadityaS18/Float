@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
 import { Progress } from "@/components/ui/progress";
-import { TrendingDown, TrendingUp, Wallet, ShieldCheck, ShieldAlert, FileText, Activity } from "lucide-react";
+import { TrendingDown, TrendingUp, Wallet, ShieldCheck, ShieldAlert, FileText, Activity, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import type { Account } from "@/hooks/useAccount";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -29,17 +29,13 @@ export function KpiCards({ account, invoices }: KpiCardsProps) {
       label: "Current Balance",
       icon: Wallet,
       value: formatCurrency(balance),
-      sub: (
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-0.5 text-xs text-float-red">
-            <TrendingDown size={12} /> 2.1%
-          </span>
-          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-float-monzo" /> Live
-          </span>
-        </div>
+      change: { value: "2.1%", negative: true },
+      badge: (
+        <span className="flex items-center gap-1 rounded-full bg-float-monzo/10 px-2 py-0.5 text-[9px] font-semibold text-float-monzo">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-float-monzo" /> Monzo Live
+        </span>
       ),
-      accent: false,
+      accentColor: "primary",
     },
     {
       label: "Payroll Coverage",
@@ -55,7 +51,8 @@ export function KpiCards({ account, invoices }: KpiCardsProps) {
           <span className="text-[10px] text-muted-foreground">Due Fri Feb 27</span>
         </div>
       ),
-      accent: atRisk,
+      accentColor: atRisk ? "float-red" : "float-green",
+      danger: atRisk,
     },
     {
       label: "Outstanding Invoices",
@@ -71,7 +68,7 @@ export function KpiCards({ account, invoices }: KpiCardsProps) {
           )}
         </div>
       ),
-      accent: false,
+      accentColor: overdueCount > 0 ? "float-amber" : "primary",
     },
     {
       label: "Runway",
@@ -80,47 +77,67 @@ export function KpiCards({ account, invoices }: KpiCardsProps) {
       valueColor: runwayDays < 14 ? "text-float-red" : runwayDays < 30 ? "text-float-amber" : "text-float-green",
       sub: (
         <div className="space-y-1.5">
-          <Progress value={Math.min(100, (runwayDays / 60) * 100)} className="h-1.5" />
+          <Progress
+            value={Math.min(100, (runwayDays / 60) * 100)}
+            className="h-1.5"
+          />
           <span className="text-[10px] text-muted-foreground">Based on 30-day AI projection</span>
         </div>
       ),
-      accent: false,
+      accentColor: runwayDays < 14 ? "float-red" : runwayDays < 30 ? "float-amber" : "float-green",
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {cards.map((card, idx) => (
-        <Card
-          key={card.label}
-          className={`group relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
-            card.accent
-              ? "border-float-red/30 shadow-[0_0_20px_-6px_hsl(var(--float-red)/0.15)]"
-              : "hover:shadow-primary/5"
-          }`}
-        >
-          {/* Decorative top accent bar */}
-          <div className={`absolute inset-x-0 top-0 h-0.5 ${
-            card.accent ? "bg-float-red" : idx === 0 ? "bg-primary" : idx === 3 ? "bg-float-green" : "bg-border"
-          }`} />
-          <CardContent className="p-4 pt-5">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{card.label}</p>
-              <div className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
-                card.accent
-                  ? "bg-float-red/10 text-float-red"
-                  : "bg-muted/50 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
-              }`}>
-                <card.icon size={15} />
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {cards.map((card) => {
+        const IconComp = card.icon;
+        return (
+          <Card
+            key={card.label}
+            className={`group relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${
+              card.danger
+                ? "border-float-red/25 shadow-[0_0_24px_-8px_hsl(var(--float-red)/0.12)]"
+                : "hover:shadow-primary/[0.06]"
+            }`}
+          >
+            {/* Top accent */}
+            <div className={`absolute inset-x-0 top-0 h-[3px] bg-${card.accentColor} transition-all duration-300 group-hover:h-1`} />
+
+            <CardContent className="p-5 pt-6">
+              <div className="flex items-start justify-between">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{card.label}</p>
+                <div className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-300 ${
+                  card.danger
+                    ? "bg-float-red/10 text-float-red"
+                    : "bg-muted/60 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+                }`}>
+                  <IconComp size={16} strokeWidth={2} />
+                </div>
               </div>
-            </div>
-            <p className={`mt-2.5 font-mono text-2xl font-bold tabular-nums ${(card as any).valueColor ?? "text-foreground"}`}>
-              {card.value}
-            </p>
-            <div className="mt-2.5">{card.sub}</div>
-          </CardContent>
-        </Card>
-      ))}
+
+              <p className={`mt-3 font-mono text-[1.65rem] font-bold tabular-nums leading-none ${(card as any).valueColor ?? "text-foreground"}`}>
+                {card.value}
+              </p>
+
+              <div className="mt-3">
+                {card.change && (
+                  <div className="flex items-center gap-2">
+                    <span className={`flex items-center gap-0.5 text-xs font-medium ${
+                      card.change.negative ? "text-float-red" : "text-float-green"
+                    }`}>
+                      {card.change.negative ? <ArrowDownRight size={12} /> : <ArrowUpRight size={12} />}
+                      {card.change.value}
+                    </span>
+                    {card.badge}
+                  </div>
+                )}
+                {card.sub}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }
