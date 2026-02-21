@@ -123,6 +123,10 @@ serve(async (req) => {
 
           elevenLabsWs = new WebSocket(signed_url);
 
+          // Buffer early messages from ElevenLabs until onmessage is set
+          const earlyMessages: MessageEvent[] = [];
+          let elReady = false;
+
           elevenLabsWs.onopen = () => {
             console.log("[Bridge] ElevenLabs WebSocket connected");
 
@@ -131,7 +135,7 @@ serve(async (req) => {
             const amount = customParams.amount || "an outstanding amount";
             const dueDate = customParams.dueDate || "recently";
 
-            // Send dynamic context only — overrides must be enabled in ElevenLabs dashboard
+            // Send dynamic context only
             elevenLabsWs!.send(
               JSON.stringify({
                 type: "conversation_initiation_client_data",
@@ -143,13 +147,19 @@ serve(async (req) => {
                 },
               })
             );
+            console.log("[Bridge] Sent conversation_initiation_client_data");
           };
 
+          let audioChunkCount = 0;
           elevenLabsWs.onmessage = async (elEvent) => {
             try {
               const data = JSON.parse(elEvent.data as string);
 
               if (data.type === "audio" && data.audio_event?.audio_base_64 && streamSid) {
+                audioChunkCount++;
+                if (audioChunkCount <= 3) {
+                  console.log("[Bridge] ElevenLabs → Twilio audio chunk #" + audioChunkCount, "size:", data.audio_event.audio_base_64.length);
+                }
                 // ElevenLabs → Twilio: convert PCM 16kHz to μ-law 8kHz
                 const payload = useConversion
                   ? linear16kToMulaw(data.audio_event.audio_base_64)
@@ -232,6 +242,11 @@ serve(async (req) => {
                   }
                 }
               }
+
+              // Log other message types for debugging
+              if (!["audio", "conversation_initiation_metadata", "agent_response", "client_tool_call"].includes(data.type)) {
+                console.log("[Bridge] ElevenLabs event:", data.type);
+              }
             } catch (e) {
               console.error("[Bridge] Error handling ElevenLabs msg:", e);
             }
@@ -257,6 +272,8 @@ serve(async (req) => {
             elevenLabsWs.send(
               JSON.stringify({ user_audio_chunk: audioChunk })
             );
+          } else if (elevenLabsWs) {
+            console.log("[Bridge] ElevenLabs not ready, state:", elevenLabsWs.readyState);
           }
           break;
         }
