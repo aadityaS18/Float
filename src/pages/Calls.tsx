@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, forwardRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Phone, PhoneOff, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +29,7 @@ const statusColor: Record<string, string> = {
   "in-progress": "bg-primary/10 text-primary border-primary/20",
 };
 
-const CallsPage = forwardRef<HTMLDivElement>(function CallsPage(_props, ref) {
+export default function CallsPage() {
   const { account } = useAccount();
   const { toast } = useToast();
   const location = useLocation();
@@ -141,7 +141,7 @@ const CallsPage = forwardRef<HTMLDivElement>(function CallsPage(_props, ref) {
   };
 
   return (
-    <div ref={ref} className="flex h-full flex-col">
+    <div className="flex h-full flex-col">
       <div className="border-b border-border px-6 py-4">
         <h1 className="text-lg font-semibold text-foreground">Collection Calls</h1>
         <p className="text-sm text-muted-foreground">AI-powered phone calls to chase overdue invoices via Twilio</p>
@@ -293,6 +293,4 @@ const CallsPage = forwardRef<HTMLDivElement>(function CallsPage(_props, ref) {
       </div>
     </div>
   );
-});
-
-export default CallsPage;
+}
