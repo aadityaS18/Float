@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
 import { Progress } from "@/components/ui/progress";
+import { TrendingDown, TrendingUp, Wallet, ShieldCheck, ShieldAlert, FileText, Activity } from "lucide-react";
 import type { Account } from "@/hooks/useAccount";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -20,72 +21,94 @@ export function KpiCards({ account, invoices }: KpiCardsProps) {
     .filter((i) => i.status !== "paid")
     .reduce((sum, i) => sum + i.amount, 0);
   const overdueCount = invoices.filter((i) => i.status === "overdue").length;
+  const unpaidCount = invoices.filter((i) => i.status !== "paid").length;
   const runwayDays = atRisk ? 9 : 47;
 
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {/* Balance */}
-      <Card className="transition-all hover:-translate-y-0.5 hover:shadow-md">
-        <CardContent className="p-5 space-y-1">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Current Balance</p>
-          <p className="text-2xl font-bold font-mono tabular-nums text-foreground">{formatCurrency(balance)}</p>
-          <p className="text-xs text-float-red font-mono">↓ 2.1% vs yesterday</p>
-          <div className="flex items-center gap-1 mt-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-float-monzo" />
-            <span className="text-[10px] text-muted-foreground">Live from Monzo</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Payroll Coverage */}
-      <Card className={`transition-all hover:-translate-y-0.5 hover:shadow-md ${atRisk ? "border-float-red/30 bg-float-red/[0.03]" : ""}`}>
-        <CardContent className="p-5 space-y-1">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Payroll Coverage</p>
-          {atRisk ? (
-            <>
-              <span className="inline-flex items-center rounded-full bg-float-red/10 px-2 py-0.5 text-xs font-bold text-float-red">🔴 AT RISK</span>
-              <p className="text-lg font-mono font-bold text-float-red tabular-nums">−{formatCurrency(shortfall)} shortfall</p>
-            </>
-          ) : (
-            <>
-              <span className="inline-flex items-center rounded-full bg-float-green/10 px-2 py-0.5 text-xs font-bold text-float-green">✓ Covered</span>
-              <p className="text-lg font-mono font-bold text-float-green tabular-nums">+{formatCurrency(balance - payroll)} above</p>
-            </>
+  const cards = [
+    {
+      label: "Current Balance",
+      icon: Wallet,
+      value: formatCurrency(balance),
+      sub: (
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-0.5 text-xs text-float-red">
+            <TrendingDown size={12} /> 2.1%
+          </span>
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-float-monzo" /> Live
+          </span>
+        </div>
+      ),
+      accent: false,
+    },
+    {
+      label: "Payroll Coverage",
+      icon: atRisk ? ShieldAlert : ShieldCheck,
+      value: atRisk ? `−${formatCurrency(shortfall)}` : `+${formatCurrency(balance - payroll)}`,
+      sub: (
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+            atRisk ? "bg-float-red/10 text-float-red" : "bg-float-green/10 text-float-green"
+          }`}>
+            {atRisk ? "At Risk" : "Covered"}
+          </span>
+          <span className="text-[10px] text-muted-foreground">Due Fri Feb 27</span>
+        </div>
+      ),
+      accent: atRisk,
+    },
+    {
+      label: "Outstanding Invoices",
+      icon: FileText,
+      value: formatCurrency(totalOutstanding),
+      sub: (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">{unpaidCount} invoice{unpaidCount !== 1 ? "s" : ""}</span>
+          {overdueCount > 0 && (
+            <span className="rounded-full bg-float-red/10 px-1.5 py-0.5 text-[10px] font-semibold text-float-red">
+              {overdueCount} overdue
+            </span>
           )}
-          <p className="text-[10px] text-muted-foreground">Next payroll: {formatCurrency(payroll)} · Friday Feb 27</p>
-        </CardContent>
-      </Card>
+        </div>
+      ),
+      accent: false,
+    },
+    {
+      label: "Runway",
+      icon: Activity,
+      value: `${runwayDays} days`,
+      valueColor: runwayDays < 14 ? "text-float-red" : runwayDays < 30 ? "text-float-amber" : "text-float-green",
+      sub: (
+        <div className="space-y-1.5">
+          <Progress value={Math.min(100, (runwayDays / 60) * 100)} className="h-1.5" />
+          <span className="text-[10px] text-muted-foreground">Based on 30-day AI projection</span>
+        </div>
+      ),
+      accent: false,
+    },
+  ];
 
-      {/* Outstanding Invoices */}
-      <Card className="transition-all hover:-translate-y-0.5 hover:shadow-md">
-        <CardContent className="p-5 space-y-1">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Outstanding Invoices</p>
-          <p className="text-2xl font-bold font-mono tabular-nums text-foreground">{formatCurrency(totalOutstanding)}</p>
-          <p className="text-xs text-muted-foreground">
-            {invoices.filter((i) => i.status !== "paid").length} invoices
-            {overdueCount > 0 && (
-              <span className="ml-1 inline-flex items-center rounded-full bg-float-red/10 px-1.5 py-0.5 text-[10px] font-bold text-float-red">
-                {overdueCount} overdue
-              </span>
-            )}
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Runway */}
-      <Card className="transition-all hover:-translate-y-0.5 hover:shadow-md">
-        <CardContent className="p-5 space-y-1">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Runway</p>
-          <p className={`text-2xl font-bold font-mono tabular-nums ${runwayDays < 14 ? "text-float-red" : runwayDays < 30 ? "text-float-amber" : "text-float-green"}`}>
-            {runwayDays} days
-          </p>
-          <Progress
-            value={Math.min(100, (runwayDays / 60) * 100)}
-            className="h-1.5 mt-2"
-          />
-          <p className="text-[10px] text-muted-foreground">Based on AI's 30-day analysis</p>
-        </CardContent>
-      </Card>
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {cards.map((card) => (
+        <Card
+          key={card.label}
+          className={`group transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+            card.accent ? "border-float-red/20 bg-float-red/[0.02]" : ""
+          }`}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{card.label}</p>
+              <card.icon size={15} className={`text-muted-foreground/50 transition-colors group-hover:text-muted-foreground ${card.accent ? "text-float-red/50" : ""}`} />
+            </div>
+            <p className={`mt-2 font-mono text-xl font-bold tabular-nums ${(card as any).valueColor ?? "text-foreground"}`}>
+              {card.value}
+            </p>
+            <div className="mt-2">{card.sub}</div>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }

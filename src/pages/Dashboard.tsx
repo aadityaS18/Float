@@ -40,7 +40,6 @@ export default function DashboardPage() {
     };
     fetchAll();
 
-    // Realtime subscriptions
     const channel = supabase
       .channel("dashboard-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "invoices", filter: `account_id=eq.${account.id}` }, (payload) => {
@@ -64,28 +63,25 @@ export default function DashboardPage() {
   }, [account]);
 
   const openIncident = incidents.find((i) => i.status === "open" && i.severity === "P1");
-  const balance = account?.payroll_at_risk ? 620000 : 620000; // From account or mock
 
   return (
     <>
-      <TopBar title="Dashboard" insightCount={insights.length} />
-      <div className="p-6 space-y-6">
-        <div className="animate-fade-in-up" style={{ animationDelay: "100ms" }}>
-          <CrisisBanner
-            account={account}
-            onFixIt={() => setShowFixIt(true)}
-          />
+      <TopBar title="Dashboard" subtitle={account?.business_name ?? undefined} insightCount={insights.length} />
+
+      <div className="space-y-4 p-4 lg:p-6">
+        <div className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
+          <CrisisBanner account={account} onFixIt={() => setShowFixIt(true)} />
         </div>
 
-        <div className="animate-fade-in-up" style={{ animationDelay: "200ms" }}>
+        <div className="animate-fade-in-up" style={{ animationDelay: "150ms" }}>
           <KpiCards account={account} invoices={invoices} />
         </div>
 
-        <div className="animate-fade-in-up" style={{ animationDelay: "400ms" }}>
+        <div className="animate-fade-in-up" style={{ animationDelay: "250ms" }}>
           <CashflowChart projections={projections} payrollThreshold={account?.payroll_amount ?? 840000} />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-fade-in-up" style={{ animationDelay: "500ms" }}>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 animate-fade-in-up" style={{ animationDelay: "350ms" }}>
           <div className="lg:col-span-3">
             <InvoiceTable
               invoices={invoices}
@@ -107,16 +103,13 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="animate-fade-in-up" style={{ animationDelay: "600ms" }}>
+        <div className="animate-fade-in-up" style={{ animationDelay: "450ms" }}>
           <BenchmarkPanel />
         </div>
       </div>
 
       {showFixIt && openIncident && (
-        <FixItModal
-          incident={openIncident}
-          onClose={() => setShowFixIt(false)}
-        />
+        <FixItModal incident={openIncident} onClose={() => setShowFixIt(false)} />
       )}
     </>
   );
