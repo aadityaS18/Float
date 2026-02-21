@@ -25,24 +25,21 @@ serve(async (req) => {
     if (!to) throw new Error("'to' phone number is required");
     if (!clientName) throw new Error("'clientName' is required");
 
-    // Build TwiML with Polly Neural voice for natural-sounding speech
+    // Build TwiML using ElevenLabs TTS audio via tts-audio edge function
     const amountFormatted = `€${(amount / 100).toLocaleString("en-IE", { minimumFractionDigits: 2 })}`;
-    
+
+    const mainMessage = `Hello, this is an automated call regarding an overdue invoice from The Cobblestone Kitchen. We are calling about invoice ${invoiceNumber || "on your account"}, for the amount of ${amountFormatted}, which was due on ${dueDate || "a previous date"}. This payment is now overdue and we kindly request immediate payment of the full amount of ${amountFormatted}. Please arrange payment as soon as possible to avoid further follow-up action. If you have already made this payment, please disregard this message. To discuss payment arrangements, please contact us directly. Thank you for your attention to this matter.`;
+
+    const repeatMessage = `Once again, please pay the outstanding amount of ${amountFormatted} for invoice ${invoiceNumber || "on file"} at your earliest convenience. Thank you, and goodbye.`;
+
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const ttsBaseUrl = `${SUPABASE_URL}/functions/v1/tts-audio`;
+
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Amy-Neural" language="en-GB">
-    Hello, this is an automated call regarding an overdue invoice from The Cobblestone Kitchen.
-    We are calling about invoice ${invoiceNumber || "on your account"}, for the amount of ${amountFormatted}, which was due on ${dueDate || "a previous date"}.
-    This payment is now overdue and we kindly request immediate payment of the full amount of ${amountFormatted}.
-    Please arrange payment as soon as possible to avoid further follow-up action.
-    If you have already made this payment, please disregard this message.
-    To discuss payment arrangements, please contact us directly.
-    Thank you for your attention to this matter.
-  </Say>
+  <Play>${ttsBaseUrl}?text=${encodeURIComponent(mainMessage)}</Play>
   <Pause length="2"/>
-  <Say voice="Polly.Amy-Neural" language="en-GB">
-    Once again, please pay the outstanding amount of ${amountFormatted} for invoice ${invoiceNumber || "on file"} at your earliest convenience. Thank you, and goodbye.
-  </Say>
+  <Play>${ttsBaseUrl}?text=${encodeURIComponent(repeatMessage)}</Play>
 </Response>`;
 
     // Make the Twilio call
