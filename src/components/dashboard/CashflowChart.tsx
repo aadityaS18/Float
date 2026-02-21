@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, ReferenceArea,
@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/format";
 import { format, subDays } from "date-fns";
 import { Sparkles, TrendingDown, TrendingUp, Calendar, ArrowRight } from "lucide-react";
+import { CashflowDrilldown } from "./CashflowDrilldown";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Projection = Tables<"cashflow_projections">;
@@ -21,7 +22,26 @@ type Range = "14d" | "30d" | "60d";
 export function CashflowChart({ projections, payrollThreshold }: CashflowChartProps) {
   const [range, setRange] = useState<Range>("30d");
   const [animate, setAnimate] = useState(false);
+  const [drilldown, setDrilldown] = useState<{ date: string; projected: number } | null>(null);
   const today = new Date("2026-02-21");
+
+  // Generate mock breakdown for a projected day
+  const generateBreakdown = useCallback((dateLabel: string, projected: number) => {
+    const incomeItems = [
+      { label: "Client payments", amount: Math.round(projected * 0.35) },
+      { label: "Recurring revenue", amount: Math.round(projected * 0.25) },
+      { label: "Late payments", amount: Math.round(projected * 0.08) },
+    ];
+    const totalIncome = incomeItems.reduce((s, i) => s + i.amount, 0);
+    const totalExpenses = totalIncome - (projected - (chartData.find(d => d.date === dateLabel)?.projected ?? projected));
+    const expenseItems = [
+      { label: "Payroll", amount: Math.round(totalExpenses * 0.45) },
+      { label: "Suppliers", amount: Math.round(totalExpenses * 0.25) },
+      { label: "Rent & utilities", amount: Math.round(totalExpenses * 0.18) },
+      { label: "Other", amount: Math.round(totalExpenses * 0.12) },
+    ];
+    return { date: dateLabel, projected, income: incomeItems, expenses: expenseItems };
+  }, []);
 
   // Trigger animation on mount / range change
   useEffect(() => {
@@ -316,7 +336,7 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
                   }}
                 />
 
-                {/* Projected balance */}
+                {/* Projected balance — clickable */}
                 <Area
                   type="monotone"
                   dataKey="projected"
@@ -331,11 +351,17 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
                   connectNulls={false}
                   dot={false}
                   activeDot={{
-                    r: 5,
+                    r: 6,
                     strokeWidth: 2.5,
                     fill: "hsl(var(--card))",
                     stroke: "hsl(var(--float-amber))",
-                  }}
+                    cursor: "pointer",
+                    onClick: (_: any, e: any) => {
+                      if (e?.payload?.projected != null) {
+                        setDrilldown({ date: e.payload.date, projected: e.payload.projected });
+                      }
+                    },
+                  } as any}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -352,6 +378,16 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
               <div className="h-3 w-4 rounded-sm bg-float-red/[0.06] border border-float-red/10" />
               <span className="text-[10px] text-muted-foreground">Danger zone</span>
             </div>
+          </div>
+        )}
+
+        {/* Drilldown panel */}
+        {drilldown && (
+          <div className="pt-3">
+            <CashflowDrilldown
+              data={generateBreakdown(drilldown.date, drilldown.projected)}
+              onClose={() => setDrilldown(null)}
+            />
           </div>
         )}
       </CardContent>
