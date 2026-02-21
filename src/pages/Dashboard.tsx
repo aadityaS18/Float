@@ -69,9 +69,6 @@ export default function DashboardPage() {
       <TopBar title="Dashboard" subtitle={account?.business_name ?? undefined} insightCount={insights.length} />
 
       <div className="space-y-4 p-4 lg:p-6">
-        <div className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
-          <CrisisBanner account={account} onFixIt={() => setShowFixIt(true)} />
-        </div>
 
         <div className="animate-fade-in-up" style={{ animationDelay: "150ms" }}>
           <KpiCards account={account} invoices={invoices} />
