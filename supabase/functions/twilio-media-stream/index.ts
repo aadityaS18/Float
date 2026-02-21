@@ -143,7 +143,7 @@ serve(async (req) => {
             );
           };
 
-          elevenLabsWs.onmessage = (elEvent) => {
+          elevenLabsWs.onmessage = async (elEvent) => {
             try {
               const data = JSON.parse(elEvent.data as string);
 
