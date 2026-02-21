@@ -129,8 +129,9 @@ serve(async (req) => {
             const clientName = customParams.clientName || "the client";
             const invoiceNumber = customParams.invoiceNumber || "on file";
             const amount = customParams.amount || "an outstanding amount";
+            const dueDate = customParams.dueDate || "recently";
 
-            // Send dynamic context without overriding agent config
+            // Send dynamic context and conversation config
             elevenLabsWs!.send(
               JSON.stringify({
                 type: "conversation_initiation_client_data",
@@ -138,6 +139,35 @@ serve(async (req) => {
                   client_name: clientName,
                   invoice_number: invoiceNumber,
                   amount: amount,
+                  due_date: dueDate,
+                },
+                conversation_config_override: {
+                  agent: {
+                    prompt: {
+                      prompt: `You are Aria, a friendly and professional accounts representative calling on behalf of a business to discuss an outstanding invoice. You are speaking with ${clientName}.
+
+INVOICE DETAILS:
+- Invoice Number: ${invoiceNumber}
+- Amount Due: ${amount}
+- Due Date: ${dueDate}
+
+YOUR BEHAVIOR:
+- Be warm, polite and conversational. Listen carefully to what the person says and respond naturally.
+- If they have questions about the invoice, answer them using the details above.
+- If they want to pay now, you can collect their card details using the process_payment tool.
+- If they need more time, be understanding and ask when they expect to be able to pay.
+- If they dispute the invoice, acknowledge their concern and offer to have someone from the team follow up.
+- Keep responses concise and natural — this is a phone call, not an email.
+- ALWAYS wait for the person to finish speaking before responding.
+- Ask follow-up questions to keep the conversation going naturally.
+- If they say they already paid, thank them and let them know you'll update the records.`,
+                    },
+                    first_message: `Hi there! Am I speaking with someone from ${clientName}? I'm calling about invoice ${invoiceNumber} for ${amount}.`,
+                  },
+                  tts: {
+                    stability: 0.6,
+                    similarity_boost: 0.8,
+                  },
                 },
               })
             );
