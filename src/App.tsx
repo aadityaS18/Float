@@ -8,6 +8,9 @@ import { AppLayout } from "@/components/AppLayout";
 import AuthPage from "@/pages/Auth";
 import OnboardingPage from "@/pages/Onboarding";
 import DashboardPage from "@/pages/Dashboard";
+import ChatPage from "@/pages/Chat";
+import CallsPage from "@/pages/Calls";
+import IncidentsPage from "@/pages/Incidents";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,9 +33,9 @@ function AppRoutes() {
       <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/chat" element={<div className="p-6 text-muted-foreground">AI Chat — coming in Phase 2</div>} />
-        <Route path="/calls" element={<div className="p-6 text-muted-foreground">Calls — coming in Phase 2</div>} />
-        <Route path="/incidents" element={<div className="p-6 text-muted-foreground">Incidents — coming in Phase 2</div>} />
+        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/calls" element={<CallsPage />} />
+        <Route path="/incidents" element={<IncidentsPage />} />
         <Route path="/settings" element={<div className="p-6 text-muted-foreground">Settings — coming in Phase 2</div>} />
       </Route>
       <Route path="/" element={<Navigate to={user ? "/dashboard" : "/auth"} replace />} />
