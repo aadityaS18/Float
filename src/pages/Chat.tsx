@@ -14,10 +14,12 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
 async function streamChat({
   messages,
+  accountId,
   onDelta,
   onDone,
 }: {
   messages: Msg[];
+  accountId?: string;
   onDelta: (t: string) => void;
   onDone: () => void;
 }) {
@@ -27,7 +29,7 @@ async function streamChat({
       "Content-Type": "application/json",
       Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
     },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, account_id: accountId }),
   });
 
   if (!resp.ok) {
@@ -126,6 +128,7 @@ export default function ChatPage() {
     try {
       await streamChat({
         messages: [...messages, userMsg],
+        accountId: account.id,
         onDelta: upsert,
         onDone: () => {
           setLoading(false);

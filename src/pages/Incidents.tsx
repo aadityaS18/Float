@@ -183,6 +183,10 @@ export default function IncidentsPage() {
 
       <ScrollArea className="flex-1 px-6">
         <div className="mx-auto max-w-4xl space-y-3 py-6">
+          {/* AI Learning Summary Panel */}
+          {!loading && resolvedCount > 0 && (
+            <AiLearningSummary incidents={incidents} />
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
@@ -359,6 +363,152 @@ function IncidentCard({ incident, events, expanded, onToggle, onUpdateStatus, on
               </Button>
             </div>
           )}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+/* ── AI Learning Summary Panel ───────────────────────────── */
+
+function AiLearningSummary({ incidents }: { incidents: Incident[] }) {
+  const resolved = incidents.filter((i) => i.status === "resolved" || i.status === "closed");
+  
+  const allEvents = resolved.flatMap((inc) => {
+    const evts = (Array.isArray(inc.events) ? inc.events : []) as IncidentEvent[];
+    return evts.map((e) => ({ ...e, incidentTitle: inc.title }));
+  });
+
+  const callLearnings = allEvents.filter((e) => e.type === "CALL_COMPLETED");
+  const paymentLearnings = allEvents.filter((e) => e.type === "PAYMENT_RECEIVED");
+  const strategyLearnings = allEvents.filter((e) => e.type === "STRATEGY_COMPUTED");
+
+  const totalShortfallRecovered = resolved
+    .filter((i) => i.shortfall_amount)
+    .reduce((sum, i) => sum + (i.shortfall_amount || 0), 0);
+
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Card className="border-primary/10 bg-gradient-to-br from-primary/[0.02] to-transparent">
+      <CardHeader
+        className="cursor-pointer pb-3"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
+              <Brain size={14} className="text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-sm font-semibold">AI Learning Summary</CardTitle>
+              <p className="text-[11px] text-muted-foreground">
+                Aggregated insights from {resolved.length} resolved incident{resolved.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary text-[10px]">
+              <Sparkles size={9} className="mr-1" /> {allEvents.length} learnings
+            </Badge>
+            {expanded ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+        </div>
+      </CardHeader>
+
+      {expanded && (
+        <CardContent className="pt-0">
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="rounded-lg border border-border bg-card p-3 text-center">
+              <p className="font-mono text-lg font-semibold tabular-nums text-float-green leading-none">
+                {totalShortfallRecovered > 0 ? `€${(totalShortfallRecovered / 100).toLocaleString()}` : "€0"}
+              </p>
+              <p className="mt-1 text-[10px] text-muted-foreground">Shortfall Addressed</p>
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3 text-center">
+              <p className="font-mono text-lg font-semibold tabular-nums text-primary leading-none">
+                {callLearnings.length}
+              </p>
+              <p className="mt-1 text-[10px] text-muted-foreground">Call Outcomes Learned</p>
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3 text-center">
+              <p className="font-mono text-lg font-semibold tabular-nums text-float-amber leading-none">
+                {strategyLearnings.length}
+              </p>
+              <p className="mt-1 text-[10px] text-muted-foreground">Strategies Computed</p>
+            </div>
+          </div>
+
+          {/* Key Learnings */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Key Learnings</p>
+            
+            {callLearnings.length > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
+                <PhoneCall size={13} className="mt-0.5 shrink-0 text-float-amber" />
+                <div>
+                  <p className="text-xs font-medium text-foreground">Learning from Calls</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {callLearnings.length} collection call{callLearnings.length !== 1 ? "s" : ""} completed. 
+                    AI has learned debtor response patterns and optimal contact timing from these interactions.
+                  </p>
+                  <div className="mt-2 space-y-1">
+                    {callLearnings.slice(0, 3).map((cl, i) => (
+                      <p key={i} className="text-[10px] text-muted-foreground">
+                        <span className="font-medium text-foreground">via Incident:</span> {cl.incidentTitle} — {cl.message}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {paymentLearnings.length > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
+                <CreditCard size={13} className="mt-0.5 shrink-0 text-float-green" />
+                <div>
+                  <p className="text-xs font-medium text-foreground">Learning from Payments</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {paymentLearnings.length} payment{paymentLearnings.length !== 1 ? "s" : ""} received via incidents. 
+                    AI has learned which collection strategies lead to faster payment.
+                  </p>
+                  <div className="mt-2 space-y-1">
+                    {paymentLearnings.slice(0, 3).map((pl, i) => (
+                      <p key={i} className="text-[10px] text-muted-foreground">
+                        <span className="font-medium text-foreground">via Incident:</span> {pl.incidentTitle} — {pl.message}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {strategyLearnings.length > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
+                <Brain size={13} className="mt-0.5 shrink-0 text-primary" />
+                <div>
+                  <p className="text-xs font-medium text-foreground">Learning from Strategies</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {strategyLearnings.length} resolution strateg{strategyLearnings.length !== 1 ? "ies" : "y"} computed. 
+                    AI refines its crisis response playbook with each incident.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {callLearnings.length === 0 && paymentLearnings.length === 0 && strategyLearnings.length === 0 && (
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-3">
+                <Sparkles size={13} className="text-muted-foreground" />
+                <p className="text-[11px] text-muted-foreground">
+                  Incidents resolved but no detailed event learnings captured yet. Future incidents will build the AI knowledge base.
+                </p>
+              </div>
+            )}
+          </div>
         </CardContent>
       )}
     </Card>
