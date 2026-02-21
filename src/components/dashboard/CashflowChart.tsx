@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, type ReactNode } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, ReferenceArea,
@@ -467,6 +467,9 @@ export function CashflowChart({ projections, payrollThreshold }: CashflowChartPr
           </div>
         )}
 
+        {/* Scenario summary card */}
+        {showScenarios && hasData && <ScenarioSummary chartData={chartData} payrollThreshold={payrollThreshold} />}
+
         {/* Drilldown panel */}
         {drilldown && (
           <div className="pt-3">
@@ -517,6 +520,94 @@ function LegendItem({ color, label, dashed }: { color: string; label: string; da
         style={dashed ? { backgroundImage: `repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 8px)` } : undefined}
       />
       <span className="text-[10px] text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+function ScenarioSummary({ chartData, payrollThreshold }: {
+  chartData: { bestCase: number | null; worstCase: number | null; projected: number | null; date: string }[];
+  payrollThreshold: number;
+}) {
+  const projected = chartData.filter((d) => d.projected != null);
+  if (projected.length === 0) return null;
+
+  const lastPoint = projected[projected.length - 1];
+  const bestVals = projected.map((d) => d.bestCase!).filter(Boolean);
+  const worstVals = projected.map((d) => d.worstCase!).filter(Boolean);
+
+  const bestEnd = lastPoint.bestCase ?? 0;
+  const worstEnd = lastPoint.worstCase ?? 0;
+  const baseEnd = lastPoint.projected ?? 0;
+  const range = bestEnd - worstEnd;
+  const worstDaysBelow = worstVals.filter((v) => v < payrollThreshold).length;
+  const bestPeak = bestVals.length > 0 ? Math.max(...bestVals) : 0;
+
+  return (
+    <div className="mt-4 rounded-xl border border-border bg-accent/30 p-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <div className="flex items-center gap-2 mb-3">
+        <GitBranch size={14} className="text-primary" />
+        <span className="text-xs font-semibold text-foreground">Scenario Analysis</span>
+        <span className="text-[10px] text-muted-foreground ml-auto">{projected.length}-day outlook</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <ScenarioMetric
+          label="Best case end"
+          value={formatCurrency(bestEnd)}
+          sub={`+${formatCurrency(bestEnd - baseEnd)} vs base`}
+          color="text-float-green"
+        />
+        <ScenarioMetric
+          label="Worst case end"
+          value={formatCurrency(worstEnd)}
+          sub={`${formatCurrency(worstEnd - baseEnd)} vs base`}
+          color="text-float-red"
+        />
+        <ScenarioMetric
+          label="Outcome range"
+          value={formatCurrency(range)}
+          sub="Between best & worst"
+          color="text-foreground"
+        />
+        <ScenarioMetric
+          label="Worst payroll risk"
+          value={worstDaysBelow > 0 ? `${worstDaysBelow} days` : "None"}
+          sub={worstDaysBelow > 0 ? "Days below threshold" : "Always covered"}
+          color={worstDaysBelow > 0 ? "text-float-red" : "text-float-green"}
+        />
+      </div>
+      {/* Range bar */}
+      <div className="mt-3 pt-3 border-t border-border">
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1.5">
+          <span>Worst</span>
+          <span>Base</span>
+          <span>Best</span>
+        </div>
+        <div className="relative h-2 rounded-full bg-muted overflow-hidden">
+          <div
+            className="absolute inset-y-0 rounded-full"
+            style={{
+              left: "0%",
+              right: `${Math.max(0, 100 - ((bestEnd - worstEnd) > 0 ? 100 : 0))}%`,
+              background: "linear-gradient(90deg, hsl(var(--float-red)), hsl(var(--float-amber)), hsl(var(--float-green)))",
+            }}
+          />
+          {/* Base marker */}
+          <div
+            className="absolute top-0 bottom-0 w-0.5 bg-foreground"
+            style={{ left: range > 0 ? `${((baseEnd - worstEnd) / range) * 100}%` : "50%" }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScenarioMetric({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className={`font-mono text-sm font-semibold tabular-nums ${color}`}>{value}</p>
+      <p className="text-[9px] text-muted-foreground">{sub}</p>
     </div>
   );
 }
