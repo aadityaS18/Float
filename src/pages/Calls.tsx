@@ -103,6 +103,7 @@ export default function CallsPage() {
           to: invoice.client_phone,
           clientName: invoice.client_name,
           invoiceNumber: invoice.invoice_number,
+          invoiceId: invoice.id,
           amount: invoice.amount,
           dueDate: invoice.due_date ? format(new Date(invoice.due_date), "MMMM d, yyyy") : undefined,
           callId,

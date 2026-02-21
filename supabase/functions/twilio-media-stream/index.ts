@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const ELEVENLABS_AGENT_ID = "agent_0601kj0ahmzeej18y9xp6av1bdrh";
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -172,6 +174,61 @@ serve(async (req) => {
 
               if (data.type === "agent_response") {
                 console.log("[Bridge] Agent said:", data.agent_response_event?.agent_response?.slice(0, 100));
+              }
+
+              // Handle server tool calls from ElevenLabs (e.g. process_payment)
+              if (data.type === "client_tool_call") {
+                const { tool_name, tool_call_id, parameters } = data.client_tool_call || {};
+                console.log("[Bridge] Tool call:", tool_name, "id:", tool_call_id, "params:", JSON.stringify(parameters));
+
+                if (tool_name === "process_payment") {
+                  try {
+                    const paymentRes = await fetch(
+                      `${SUPABASE_URL}/functions/v1/process-card-payment`,
+                      {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          "apikey": SUPABASE_ANON_KEY,
+                          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+                        },
+                        body: JSON.stringify({
+                          card_number: parameters.card_number,
+                          exp_month: parameters.exp_month,
+                          exp_year: parameters.exp_year,
+                          cvc: parameters.cvc,
+                          invoice_id: customParams.invoiceId || parameters.invoice_id,
+                          amount: parameters.amount_cents || parseInt(String(customParams.amountCents || "0")),
+                          client_name: customParams.clientName || parameters.client_name,
+                        }),
+                      }
+                    );
+                    const paymentResult = await paymentRes.json();
+                    console.log("[Bridge] Payment result:", JSON.stringify(paymentResult));
+
+                    // Send tool result back to ElevenLabs
+                    elevenLabsWs!.send(
+                      JSON.stringify({
+                        type: "client_tool_result",
+                        tool_call_id,
+                        result: paymentResult.success
+                          ? `Payment successful! ${paymentResult.message}`
+                          : `Payment failed: ${paymentResult.error || paymentResult.message}`,
+                        is_error: !paymentResult.success,
+                      })
+                    );
+                  } catch (payErr) {
+                    console.error("[Bridge] Payment processing error:", payErr);
+                    elevenLabsWs!.send(
+                      JSON.stringify({
+                        type: "client_tool_result",
+                        tool_call_id,
+                        result: "Payment processing failed due to a technical error. Please try again later.",
+                        is_error: true,
+                      })
+                    );
+                  }
+                }
               }
             } catch (e) {
               console.error("[Bridge] Error handling ElevenLabs msg:", e);
