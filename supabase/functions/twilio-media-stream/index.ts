@@ -135,29 +135,39 @@ serve(async (req) => {
             const amount = customParams.amount || "an outstanding amount";
             const dueDate = customParams.dueDate || "recently";
 
-            // Send dynamic context only
-            elevenLabsWs!.send(
-              JSON.stringify({
-                type: "conversation_initiation_client_data",
-                dynamic_variables: {
-                  client_name: clientName,
-                  invoice_number: invoiceNumber,
-                  amount: amount,
-                  due_date: dueDate,
+            // Send dynamic context + first message override to kick-start the conversation
+            const initPayload = {
+              type: "conversation_initiation_client_data",
+              dynamic_variables: {
+                client_name: clientName,
+                invoice_number: invoiceNumber,
+                amount: amount,
+                due_date: dueDate,
+              },
+              conversation_config_override: {
+                agent: {
+                  prompt: {
+                    prompt: `You are Aria, a friendly and professional accounts receivable assistant calling on behalf of a business. You are calling ${clientName} about their overdue invoice ${invoiceNumber} for ${amount}, which was due ${dueDate}. Be polite, empathetic, and helpful. Listen to the customer's questions and respond naturally. If they want to discuss payment plans or have concerns, be understanding and work with them. Keep responses concise since this is a phone call.`,
+                  },
+                  first_message: `Hello! Am I speaking with someone from ${clientName}? This is Aria calling about invoice ${invoiceNumber} for ${amount}. I wanted to check in and see if we can arrange payment. Is now a good time to talk?`,
                 },
-              })
-            );
-            console.log("[Bridge] Sent conversation_initiation_client_data");
+              },
+            };
+            console.log("[Bridge] Sending init payload:", JSON.stringify(initPayload).slice(0, 300));
+            elevenLabsWs!.send(JSON.stringify(initPayload));
           };
 
           let audioChunkCount = 0;
           elevenLabsWs.onmessage = async (elEvent) => {
             try {
               const data = JSON.parse(elEvent.data as string);
+              
+              // Log ALL event types for debugging
+              console.log("[Bridge] ElevenLabs event type:", data.type, data.type === "audio" ? `(chunk #${audioChunkCount + 1})` : "");
 
               if (data.type === "audio" && data.audio_event?.audio_base_64 && streamSid) {
                 audioChunkCount++;
-                if (audioChunkCount <= 3) {
+                if (audioChunkCount <= 5) {
                   console.log("[Bridge] ElevenLabs → Twilio audio chunk #" + audioChunkCount, "size:", data.audio_event.audio_base_64.length);
                 }
                 // ElevenLabs → Twilio: convert PCM 16kHz to μ-law 8kHz
