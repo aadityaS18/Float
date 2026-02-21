@@ -106,6 +106,7 @@ Realtime publication includes:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `VITE_SUPABASE_PROJECT_ID`
+- `VITE_ELEVENLABS_AGENT_ID` (optional, defaults to in-code fallback)
 
 ### Supabase Edge Functions (project secrets)
 
@@ -113,6 +114,7 @@ Realtime publication includes:
 - `ANTHROPIC_MODEL` (optional, defaults in `_shared/claude.ts`)
 - `ANTHROPIC_VERSION` (optional, defaults in `_shared/claude.ts`)
 - `ELEVENLABS_API_KEY`
+- `ELEVENLABS_AGENT_ID` (optional, defaults to in-code fallback)
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
 - `TWILIO_PHONE_NUMBER`
@@ -177,6 +179,28 @@ supabase secrets set --project-ref <your-project-ref> \
 
 ```bash
 supabase functions deploy --project-ref <your-project-ref> --use-api
+```
+
+### Voice calling integration (Twilio + ElevenLabs)
+
+1. Set required secrets in Supabase:
+
+```bash
+supabase secrets set --project-ref <your-project-ref> \
+  ELEVENLABS_API_KEY="..." \
+  ELEVENLABS_AGENT_ID="..." \
+  TWILIO_ACCOUNT_SID="..." \
+  TWILIO_AUTH_TOKEN="..." \
+  TWILIO_PHONE_NUMBER="..."
+```
+
+2. Deploy call-related functions:
+
+```bash
+supabase functions deploy make-call --project-ref <your-project-ref> --use-api
+supabase functions deploy twilio-media-stream --project-ref <your-project-ref> --use-api
+supabase functions deploy twilio-status-callback --project-ref <your-project-ref> --use-api
+supabase functions deploy elevenlabs-conversation-token --project-ref <your-project-ref> --use-api
 ```
 
 ## Notes

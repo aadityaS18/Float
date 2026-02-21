@@ -7,9 +7,18 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const escapeXml = (value: unknown) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+
 serve(async (req) => {
-  if (req.method === "OPTIONS")
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
 
   try {
     const TWILIO_ACCOUNT_SID = Deno.env.get("TWILIO_ACCOUNT_SID");
@@ -25,35 +34,35 @@ serve(async (req) => {
     if (!to) throw new Error("'to' phone number is required");
     if (!clientName) throw new Error("'clientName' is required");
 
-    // Build TwiML using ElevenLabs Conversational AI via WebSocket bridge
-    const amountFormatted = `€${(amount / 100).toLocaleString("en-IE", { minimumFractionDigits: 2 })}`;
+    const amountFormatted = `EUR ${(amount / 100).toLocaleString("en-IE", { minimumFractionDigits: 2 })}`;
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    // WebSocket URL for the media stream bridge
     const wsUrl = SUPABASE_URL.replace("https://", "wss://") + "/functions/v1/twilio-media-stream";
 
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
     <Stream url="${wsUrl}">
-      <Parameter name="clientName" value="${clientName}" />
-      <Parameter name="invoiceNumber" value="${invoiceNumber || ''}" />
-      <Parameter name="amount" value="${amountFormatted}" />
-      <Parameter name="amountCents" value="${amount || 0}" />
-      <Parameter name="invoiceId" value="${invoiceId || ''}" />
-      <Parameter name="callId" value="${callId || ''}" />
+      <Parameter name="clientName" value="${escapeXml(clientName)}" />
+      <Parameter name="invoiceNumber" value="${escapeXml(invoiceNumber || "")}" />
+      <Parameter name="amount" value="${escapeXml(amountFormatted)}" />
+      <Parameter name="amountCents" value="${escapeXml(amount || 0)}" />
+      <Parameter name="dueDate" value="${escapeXml(dueDate || "")}" />
+      <Parameter name="invoiceId" value="${escapeXml(invoiceId || "")}" />
+      <Parameter name="callId" value="${escapeXml(callId || "")}" />
     </Stream>
   </Connect>
 </Response>`;
 
-    // Make the Twilio call
     const authString = base64Encode(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
 
     const params = new URLSearchParams();
     params.append("To", to);
     params.append("From", TWILIO_PHONE_NUMBER);
     params.append("Twiml", twiml);
-    if (callId) params.append("StatusCallback", `${SUPABASE_URL}/functions/v1/twilio-status-callback?callId=${callId}`);
+    if (callId) {
+      params.append("StatusCallback", `${SUPABASE_URL}/functions/v1/twilio-status-callback?callId=${callId}`);
+    }
     params.append("StatusCallbackEvent", "completed");
 
     const twilioResponse = await fetch(
@@ -61,11 +70,11 @@ serve(async (req) => {
       {
         method: "POST",
         headers: {
-          "Authorization": `Basic ${authString}`,
+          Authorization: `Basic ${authString}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: params.toString(),
-      }
+      },
     );
 
     const twilioData = await twilioResponse.json();
@@ -83,13 +92,13 @@ serve(async (req) => {
         callSid: twilioData.sid,
         status: twilioData.status,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
     console.error("make-call error:", e);
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

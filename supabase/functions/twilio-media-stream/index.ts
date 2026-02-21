@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const ELEVENLABS_AGENT_ID = "agent_0601kj0ahmzeej18y9xp6av1bdrh";
+const ELEVENLABS_AGENT_ID =
+  Deno.env.get("ELEVENLABS_AGENT_ID") ?? "agent_0601kj0ahmzeej18y9xp6av1bdrh";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
@@ -13,7 +14,7 @@ const corsHeaders = {
 // μ-law to 16-bit linear PCM decode table
 const MULAW_DECODE: Int16Array = new Int16Array(256);
 for (let i = 0; i < 256; i++) {
-  let mu = ~i & 0xff;
+  const mu = ~i & 0xff;
   const sign = mu & 0x80;
   const exponent = (mu >> 4) & 0x07;
   const mantissa = mu & 0x0f;
@@ -122,10 +123,6 @@ serve(async (req) => {
           console.log("[Bridge] Connecting to ElevenLabs agent...");
 
           elevenLabsWs = new WebSocket(signed_url);
-
-          // Buffer early messages from ElevenLabs until onmessage is set
-          const earlyMessages: MessageEvent[] = [];
-          let elReady = false;
 
           elevenLabsWs.onopen = () => {
             console.log("[Bridge] ElevenLabs WebSocket connected");
