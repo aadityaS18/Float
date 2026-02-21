@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Phone, PhoneOff, Clock, CheckCircle2, XCircle, Loader2, PhoneCall, PhoneOutgoing, ArrowUpRight } from "lucide-react";
+import { Phone, PhoneOff, Clock, CheckCircle2, XCircle, Loader2, PhoneCall, PhoneOutgoing, ArrowUpRight, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -289,11 +289,33 @@ export default function CallsPage() {
           {/* Call History */}
           <div className="lg:col-span-3">
             <Card className="flex flex-col overflow-hidden">
-              <CardHeader className="flex flex-row items-center gap-2 pb-2">
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-muted">
-                  <Clock size={13} className="text-muted-foreground" />
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-muted">
+                    <Clock size={13} className="text-muted-foreground" />
+                  </div>
+                  <CardTitle className="text-sm font-semibold">Call History</CardTitle>
                 </div>
-                <CardTitle className="text-sm font-semibold">Call History</CardTitle>
+                {calls.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-[10px] text-destructive hover:text-destructive"
+                    onClick={async () => {
+                      if (!account) return;
+                      const { error } = await supabase.from("calls").delete().eq("account_id", account.id);
+                      if (error) {
+                        toast({ variant: "destructive", title: "Error", description: "Failed to clear call history" });
+                      } else {
+                        setCalls([]);
+                        setSelectedCall(null);
+                        toast({ title: "Cleared", description: "Call history has been deleted" });
+                      }
+                    }}
+                  >
+                    <Trash2 size={11} className="mr-1" /> Clear All
+                  </Button>
+                )}
               </CardHeader>
               <CardContent className="flex-1 p-0">
                 {loading ? (
@@ -370,6 +392,26 @@ export default function CallsPage() {
                                 {!call.outcome && !call.transcript && (
                                   <p className="text-xs text-muted-foreground italic">No transcript or outcome recorded for this call.</p>
                                 )}
+                                <div className="flex justify-end pt-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] text-destructive hover:text-destructive"
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      const { error } = await supabase.from("calls").delete().eq("id", call.id);
+                                      if (error) {
+                                        toast({ variant: "destructive", title: "Error", description: "Failed to delete call" });
+                                      } else {
+                                        setCalls((p) => p.filter((c) => c.id !== call.id));
+                                        setSelectedCall(null);
+                                        toast({ title: "Deleted", description: "Call record removed" });
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 size={10} className="mr-1" /> Delete
+                                  </Button>
+                                </div>
                               </div>
                             )}
                           </button>
