@@ -22,8 +22,10 @@ export function useAccount() {
         .from("accounts")
         .select("*")
         .eq("user_id", user.id)
-        .maybeSingle();
-      setAccount(data);
+        .order("created_at", { ascending: false });
+      // Pick the first onboarding-complete account, or fall back to the most recent
+      const completed = data?.find((a) => a.onboarding_complete);
+      setAccount(completed || data?.[0] || null);
       setLoading(false);
     };
 
